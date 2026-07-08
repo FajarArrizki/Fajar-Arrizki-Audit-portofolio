@@ -28,7 +28,7 @@ Smart contract security auditor actively participating in competitive audits acr
 ## Public Audit
 
 | # | Protocol | Scope | Critical | High | Medium | Low |
-|---|----------|-------|----------|------|------|--------|-----|
+|---|----------|-------|----------|------|------|--------|
 | 1 | Reserve Governor | StakingVault, ReserveOptimisticGovernor, TimelockControllerOptimistic, ProposalLib, RewardTokenRegistry, OptimisticSelectorRegistry, UnstakingManager | 0 | 0 | 4 | 10 |
 | 2 | Bitgo | WalletSimple, Forwarder, ForwarderV4 — `eth-multisig-v4` | 0 | 0 | 0 | 4 |
 
