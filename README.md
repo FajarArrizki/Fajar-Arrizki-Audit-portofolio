@@ -2,6 +2,12 @@
 
 > Smart Contract Security Researcher & Auditor
 
+Smart contract security auditor actively participating in competitive audits across multiple platforms. Focused on uncovering vulnerabilities in DeFi protocols and blockchain infrastructure. Experienced in analyzing a wide range of security issues from access control and logic errors to economic attacks.
+
+| Severity | Critical | High | Medium | Low | **Total** |
+|----------|----------|------|--------|-----|-----------|
+| Count | 0 | 0 | 4 | 14 | **18** |
+
 ---
 
 ## Selected Highlights
@@ -24,27 +30,11 @@
 
 ---
 
-## Total Findings
-
-| Severity | Count |
-|----------|-------|
-| Medium | 4 |
-| Low | 14 |
-| **Total** | **18** |
-
----
-
-## About Me
-
-Smart contract security auditor actively participating in competitive audits across multiple platforms. Focused on uncovering vulnerabilities in DeFi protocols and blockchain infrastructure. Experienced in analyzing a wide range of security issues from access control and logic errors to economic attacks.
-
----
-
 ## Social
 
-| Platform | Link |
-|----------|------|
-| GitHub | [github.com/FajarArrizki](https://github.com/FajarArrizki) |
-| Cantina | [cantina.xyz/u/Foundoneblock](https://cantina.xyz/u/Foundoneblock) |
-| Sherlock | [audits.sherlock.xyz/watson/Foundoneblock](https://audits.sherlock.xyz/watson/Foundoneblock) |
-| Immunefi | [immunefi.com/profile/Foundoneblock](https://immunefi.com/profile/Foundoneblock) |
+| Platform | Username | Link | Findings |
+|----------|----------|------|----------|
+| GitHub | FajarArrizki | [github.com/FajarArrizki](https://github.com/FajarArrizki) | — |
+| Cantina | Foundoneblock | [cantina.xyz/u/Foundoneblock](https://cantina.xyz/u/Foundoneblock) | 18 |
+| Sherlock | Foundoneblock | [audits.sherlock.xyz/watson/Foundoneblock](https://audits.sherlock.xyz/watson/Foundoneblock) | — |
+| Immunefi | Foundoneblock | [immunefi.com/profile/Foundoneblock](https://immunefi.com/profile/Foundoneblock) | — |

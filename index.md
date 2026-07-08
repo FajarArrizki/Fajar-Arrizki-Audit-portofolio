@@ -46,4 +46,4 @@ Low severity findings — informational issues, code quality, dead code, or edge
 
 ---
 
-**Total:** 0 High | 4 Medium | 14 Low = **18 findings**
+**Total:** 0 Critical | 0 High | 4 Medium | 14 Low = **18 findings**
