@@ -36,9 +36,9 @@ Smart contract security auditor actively participating in competitive audits acr
 
 ## Social
 
-| Platform | Username | Link | Critical | High | Medium | Low | Total |
-|----------|----------|------|----------|------|------|--------|-----|-------|
-| GitHub | FajarArrizki | [github.com/FajarArrizki](https://github.com/FajarArrizki) | 0 | 0 | 0 | 0 | 0 |
-| Cantina | Foundoneblock | [cantina.xyz/u/Foundoneblock](https://cantina.xyz/u/Foundoneblock) | 0 | 0 | 4 | 14 | 18 |
-| Sherlock | Foundoneblock | [audits.sherlock.xyz/watson/Foundoneblock](https://audits.sherlock.xyz/watson/Foundoneblock) | 0 | 0 | 0 | 0 | 0 |
-| Immunefi | Foundoneblock | [immunefi.com/profile/Foundoneblock](https://immunefi.com/profile/Foundoneblock) | 0 | 0 | 0 | 0 | 0 |
+| Platform | Link | Critical | High | Medium | Low | Total |
+|----------|------|---------:|-----:|-------:|----:|------:|
+| GitHub   | [FajarArrizki](https://github.com/FajarArrizki) | 0 | 0 | 0 | 0 | 0 |
+| Cantina  | [Foundoneblock](https://cantina.xyz/u/Foundoneblock) | 0 | 0 | 4 | 14 | 18 |
+| Sherlock | [Foundoneblock](https://audits.sherlock.xyz/watson/Foundoneblock) | 0 | 0 | 0 | 0 | 0 |
+| Immunefi | [Foundoneblock](https://immunefi.com/profile/Foundoneblock) | 0 | 0 | 0 | 0 | 0 |
