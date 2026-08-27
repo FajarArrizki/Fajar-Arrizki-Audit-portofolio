@@ -10,7 +10,7 @@ Smart contract security auditor actively participating in competitive audits acr
 
 | Severity | Critical | High | Medium | Low | **Total** |
 |----------|----------|------|--------|-----|-----------|
-| Count | 0 | 0 | 4 | 14 | **18** |
+| Count | 0 | 0 | 4 | 10 | **14** |
 
 ---
 
@@ -30,7 +30,6 @@ Smart contract security auditor actively participating in competitive audits acr
 | # | Protocol | Scope | Critical | High | Medium | Low |
 |---|----------|-------|----------|------|------|--------|
 | 1 | Reserve Governor | StakingVault, ReserveOptimisticGovernor, TimelockControllerOptimistic, ProposalLib, RewardTokenRegistry, OptimisticSelectorRegistry, UnstakingManager | 0 | 0 | 4 | 10 |
-| 2 | Bitgo | WalletSimple, Forwarder, ForwarderV4 — `eth-multisig-v4` | 0 | 0 | 0 | 4 |
 
 ---
 
@@ -39,6 +38,6 @@ Smart contract security auditor actively participating in competitive audits acr
 | Platform | Link | Critical | High | Medium | Low | Total |
 |----------|------|---------:|-----:|-------:|----:|------:|
 | GitHub   | [FajarArrizki](https://github.com/FajarArrizki) | 0 | 0 | 0 | 0 | 0 |
-| Cantina  | [Foundoneblock](https://cantina.xyz/u/Foundoneblock) | 0 | 0 | 4 | 14 | 18 |
+| Cantina  | [Foundoneblock](https://cantina.xyz/u/Foundoneblock) | 0 | 0 | 4 | 10 | 14 |
 | Sherlock | [Foundoneblock](https://audits.sherlock.xyz/watson/Foundoneblock) | 0 | 0 | 0 | 0 | 0 |
 | Immunefi | [Foundoneblock](https://immunefi.com/profile/Foundoneblock) | 0 | 0 | 0 | 0 | 0 |

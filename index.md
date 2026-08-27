@@ -2,7 +2,7 @@
 
 ---
 
-> Index of all findings from the Bitgo and Reserve Governor security audits. Organized by severity and clustered by bug type.
+> Index of all findings from the Reserve Governor security audit. Organized by severity and clustered by bug type.
 
 ---
 
@@ -37,13 +37,9 @@ Low severity findings — informational issues, code quality, dead code, or edge
 | 8 | Reserve Governor | `rg-l-08` | [rg-l-08.md](Reserve%20Governor/Low/rg-l-08/rg-l-08.md) | Accounting / Rounding |
 | 9 | Reserve Governor | `rg-l-09` | [rg-l-09.md](Reserve%20Governor/Low/rg-l-09/rg-l-09.md) | State / Gas Bloat |
 | 10 | Reserve Governor | `rg-l-10` | [rg-l-10.md](Reserve%20Governor/Low/rg-l-10/rg-l-10.md) | Timestamp Dependency |
-| 11 | Bitgo | `b-l-01` | [b-l-01.md](Bitgo/Low/b-l-01/b-l-01.md) | Implementation Capture / Access Control |
-| 12 | Bitgo | `b-l-02` | [b-l-02.md](Bitgo/Low/b-l-02/b-l-02.md) | Implementation Capture / Access Control |
-| 13 | Bitgo | `b-l-03` | [b-l-03.md](Bitgo/Low/b-l-03/b-l-03.md) | Implementation Capture / Access Control |
-| 14 | Bitgo | `b-l-04` | [b-l-04.md](Bitgo/Low/b-l-04/b-l-04.md) | Access Control / Approval Exploit |
 
-> **Low** — 14 findings spanning: (rg-l-01) original optimistic proposer canceling auto-created confirmation proposal; (rg-l-02) delayed reward accounting letting new depositors capture pending rewards; (rg-l-03) veto threshold rounding down instead of up; (rg-l-04) revoked proposer still canceling succeeded proposal; (rg-l-05) maxWithdraw/maxRedeem ignoring delayed unstaking; (rg-l-06) overpaying execute trapping surplus ETH in timelock; (rg-l-07) selector-only allowlisting not constraining call arguments; (rg-l-08) reward dust becoming permanently unclaimable; (rg-l-09) unbounded proposal descriptions duplicating across confirmation transition; (rg-l-10) veto window collapsing after timestamp discontinuity; (b-l-01) WalletSimple implementation capture via public init; (b-l-02) Forwarder implementation capture via public init; (b-l-03) ForwarderV4 implementation capture granting parent and feeAddress roles; (b-l-04) ForwarderV4 ERC721 approval drain scaling linearly with collector count.
+> **Low** — 10 findings spanning: (rg-l-01) original optimistic proposer canceling auto-created confirmation proposal; (rg-l-02) delayed reward accounting letting new depositors capture pending rewards; (rg-l-03) veto threshold rounding down instead of up; (rg-l-04) revoked proposer still canceling succeeded proposal; (rg-l-05) maxWithdraw/maxRedeem ignoring delayed unstaking; (rg-l-06) overpaying execute trapping surplus ETH in timelock; (rg-l-07) selector-only allowlisting not constraining call arguments; (rg-l-08) reward dust becoming permanently unclaimable; (rg-l-09) unbounded proposal descriptions duplicating across confirmation transition; (rg-l-10) veto window collapsing after timestamp discontinuity.
 
 ---
 
-**Total:** 0 Critical | 0 High | 4 Medium | 14 Low = **18 findings**
+**Total:** 0 Critical | 0 High | 4 Medium | 10 Low = **14 findings**
