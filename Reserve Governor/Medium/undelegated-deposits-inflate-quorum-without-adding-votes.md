@@ -1,202 +1,128 @@
-# Unbounded Optimistic Proposal Descriptions Persist and Duplicate Across Confirmation Transition
+# Undelegated Deposits Inflate Quorum Without Adding Votes
 
 ## Metadata
 
-- **Number:** #855
-- **Severity:** Low
-- **Status:** Duplicate
-- **Likelihood:** High
-- **Impact:** Medium
-- **Created by:** Foundoneblock
-- **Created at:** May 9, 2026 at 6:59 AM
-- **Last updated:** June 2, 2026 at 5:44 AM
+| Severity | Likelihood | Impact | Validity |
+|----------|------------|--------|----------|
+| Medium | High | High | confirm |
 
 ## Description
 
-# Audited by [Fajar Arrizki]
+The staking vault separates deposit from delegation.
 
-Independent audit notes by Fajar Arrizki. Findings, proof-of-concept references, and impact assessments are documented for manual review.
+Plain deposits mint shares immediately, but voting power only becomes usable after the holder delegates through the standard and optimistic delegation paths.
 
-_Note: Not all issues are guaranteed to be correct._
+That would be fine if governance quorum were based on delegated votes.
 
-# Unbounded Optimistic Proposal Descriptions Persist and Duplicate Across Confirmation Transition
----
-**#M-58**
-- Severity: Medium
-- Validity: Tested
-- Likelihood: High
-- Impact: Optimistic proposals accept arbitrarily large descriptions, store them onchain, emit them in `ProposalCreated`, and if vetoed duplicate the entire payload again into the confirmation proposal, creating avoidable storage and event-gas bloat in a path that the shared guardian may need to react to under stress.
+It is not.
 
-## Description
+`ReserveOptimisticGovernor.quorum(...)` ultimately derives quorum from `token().getPastTotalSupply(...)`, which counts all minted vault shares, including undelegated supply.
 
-Optimistic proposal admission validates description shape, but it never enforces any size limit.
+So a passive depositor can meaningfully increase the quorum denominator without increasing the votes that any account can actually cast.
 
-When an optimistic proposal is created:
+The result is a liveness break: governance can become impossible even when every delegated holder votes in favor.
 
-1. the full `string description` is stored inside `optimisticProposalDetails`,
-2. the same description is emitted through `ProposalCreated`,
-3. and if the proposal is vetoed into the standard lane, `transitionToPessimistic()` builds `Confirmation For: ` plus the entire original description and saves that as a second proposal.
-
-So a single oversized optimistic description becomes duplicated governance state.
-
-This is not a correctness bug in proposal hashing. The issue is that the protocol offers no bound on a field that is persisted, re-emitted, and copied into a second proposal lifecycle.
-
-### `proposeOptimistic()` stores the full caller-supplied description in optimistic proposal state
+### Deposits mint shares immediately, while delegation is an explicit separate step
 
 ```solidity
-function proposeOptimistic(
-    address[] calldata targets,
-    uint256[] calldata values,
-    bytes[] calldata calldatas,
-    string calldata description
-) external returns (uint256 proposalId) {
-    proposalId = getProposalId(targets, values, calldatas, keccak256(bytes(description)));
-
-    optimisticProposalDetails[proposalId] = OptimisticProposalDetails({
-        targets: targets,
-        values: values,
-        calldatas: calldatas,
-        description: description,
-        vetoThreshold: optimisticParams.vetoThreshold
-    });
-
-    ProposalLib.proposeOptimistic(
-        ProposalLib.ProposalData(proposalId, proposer, targets, values, calldatas, description),
-        _proposalCore(proposalId),
-        optimisticParams
-    );
-}
-```
-
-Source:
-- `contracts/governance/ReserveOptimisticGovernor.sol:149-173`
-
-GitHub permalink:
-- `https://github.com/reserve-protocol/reserve-governor/blob/dc27a68463cec356ff18bbdd3d8edfe9b2534372/contracts/governance/ReserveOptimisticGovernor.sol#L149-L173`
-
-### Proposal validation checks format, not size, and `_saveProposal()` emits the full description
-
-```solidity
-function _validateProposal(ProposalData calldata proposal, GovernorUpgradeable.ProposalCore storage proposalCore)
-    private
-    view
+function depositAndDelegate(uint256 assets, address delegatee, address optimisticDelegatee)
+    public
+    returns (uint256 shares)
 {
-    require(
-        _isValidDescriptionForProposer(proposal.proposer, proposal.description),
-        IGovernor.GovernorRestrictedProposer(proposal.proposer)
-    );
+    shares = deposit(assets, msg.sender);
 
-    require(
-        bytes18(bytes(proposal.description)) != CONFIRMATION_PREFIX_BYTES,
-        IReserveOptimisticGovernor.OptimisticGovernor__ConfirmationPrefixNotAllowed()
-    );
+    _delegate(msg.sender, delegatee);
+    _delegateOptimistic(msg.sender, optimisticDelegatee);
 }
 
-function _saveProposal(
-    ProposalData memory proposal,
-    GovernorUpgradeable.ProposalCore storage proposalCore,
-    uint256 voteDelay,
-    uint256 voteDuration
-) private {
-    emit IGovernor.ProposalCreated(
-        proposal.proposalId,
-        proposal.proposer,
-        proposal.targets,
-        proposal.values,
-        new string[](proposal.targets.length),
-        proposal.calldatas,
-        proposalCore.voteStart,
-        proposalCore.voteStart + proposalCore.voteDuration,
-        proposal.description
-    );
+function getOptimisticVotes(address account) external view returns (uint256) {
+    return optimisticDelegateCheckpoints[account].latest();
 }
 ```
 
 Source:
-- `contracts/governance/lib/ProposalLib.sol:147-175`
-- `contracts/governance/lib/ProposalLib.sol:177-198`
+- `contracts/staking/StakingVault.sol:188-196`
+- `contracts/staking/StakingVault.sol:220-221`
 
 GitHub permalink:
-- `https://github.com/reserve-protocol/reserve-governor/blob/dc27a68463cec356ff18bbdd3d8edfe9b2534372/contracts/governance/lib/ProposalLib.sol#L147-L175`
-- `https://github.com/reserve-protocol/reserve-governor/blob/dc27a68463cec356ff18bbdd3d8edfe9b2534372/contracts/governance/lib/ProposalLib.sol#L177-L198`
+- `https://github.com/reserve-protocol/reserve-governor/blob/dc27a68463cec356ff18bbdd3d8edfe9b2534372/contracts/staking/StakingVault.sol#L188-L196`
+- `https://github.com/reserve-protocol/reserve-governor/blob/dc27a68463cec356ff18bbdd3d8edfe9b2534372/contracts/staking/StakingVault.sol#L220-L221`
 
-### Veto transition duplicates the oversized description into a second proposal
+This shows delegation is opt-in behavior layered on top of deposit.
+
+### Quorum is computed from past total supply, not past delegated voting supply
 
 ```solidity
-function transitionToPessimistic(
-    uint256 proposalId,
-    IReserveOptimisticGovernor.OptimisticProposalDetails storage optimisticProposal,
-    mapping(uint256 proposalId => GovernorUpgradeable.ProposalCore) storage proposalCores
-) external {
-    string memory newDescription = string.concat(CONFIRMATION_PREFIX, optimisticProposal.description);
-
-    uint256 newProposalId = governor.getProposalId(
-        optimisticProposal.targets,
-        optimisticProposal.values,
-        optimisticProposal.calldatas,
-        keccak256(bytes(newDescription))
-    );
-
-    ProposalData memory proposalData = ProposalData(
-        newProposalId,
-        governor.proposalProposer(proposalId),
-        optimisticProposal.targets,
-        optimisticProposal.values,
-        optimisticProposal.calldatas,
-        newDescription
-    );
-
-    _saveProposal(proposalData, proposalCores[newProposalId], governor.votingDelay(), governor.votingPeriod());
+function quorum(uint256 timepoint)
+    public
+    view
+    override(GovernorUpgradeable, GovernorVotesQuorumFractionUpgradeable)
+    returns (uint256)
+{
+    return Math.max(1, super.quorum(timepoint));
 }
+
+function proposalThreshold()
+    public
+    view
+    override(GovernorUpgradeable, GovernorSettingsUpgradeable)
+    returns (uint256)
+{
+    uint256 proposalThresholdRatio = super.proposalThreshold(); // D18{1}
+
+    // {tok}
+    uint256 supply = Math.max(1, token().getPastTotalSupply(block.timestamp - 1));
 ```
 
 Source:
-- `contracts/governance/lib/ProposalLib.sol:108-143`
+- `contracts/governance/ReserveOptimisticGovernor.sol:202-208`
+- `contracts/governance/ReserveOptimisticGovernor.sol:302-314`
 
 GitHub permalink:
-- `https://github.com/reserve-protocol/reserve-governor/blob/dc27a68463cec356ff18bbdd3d8edfe9b2534372/contracts/governance/lib/ProposalLib.sol#L108-L143`
+- `https://github.com/reserve-protocol/reserve-governor/blob/dc27a68463cec356ff18bbdd3d8edfe9b2534372/contracts/governance/ReserveOptimisticGovernor.sol#L202-L208`
+- `https://github.com/reserve-protocol/reserve-governor/blob/dc27a68463cec356ff18bbdd3d8edfe9b2534372/contracts/governance/ReserveOptimisticGovernor.sol#L302-L314`
 
-So a single huge description can become two persisted proposal descriptions plus two event payloads.
+Because undelegated shares still expand total share supply, quorum grows even though those shares add no active voting power.
 
 ## Root Cause
 
-The root cause is that description text is treated as unbounded governance metadata even though it is persisted in proposal state and copied again during optimistic-to-confirmation transition.
+The root cause is a mismatch between the unit used for governance participation and the unit used for governance quorum.
 
 ```text
 root cause:
-- optimistic proposal creation accepts arbitrary-length descriptions
-- ReserveOptimisticGovernor persists the full string inside optimisticProposalDetails
-- ProposalLib emits the full string in ProposalCreated
-- transitionToPessimistic() prepends a prefix and saves the whole payload again as a second proposal
-- no upper bound exists to cap the storage and event footprint of this duplicated metadata
+- staking deposits mint ERC4626 shares immediately
+- delegation is optional and separate from deposit
+- undelegated shares therefore add zero usable votes
+- governor quorum still keys off past total share supply
+- passive supply can raise quorum without adding any castable voting power
 ```
 
 ## Impact
 
 This issue can cause:
 
-- avoidable proposal-creation gas bloat,
-- duplicated storage and event payloads when optimistic proposals are vetoed,
-- more expensive governance reactions in stressed scenarios,
-- and a griefable metadata surface for allowed optimistic proposers.
+- passive capital to dilute governance liveness,
+- unanimous delegated voting blocs to fail quorum anyway,
+- quorum to become meaningfully detached from the set of accounts that can actually vote,
+- and governance operators to misread a healthy total supply increase as healthy governance participation.
 
-This is a state-growth and governance-liveness issue rather than a direct execution bypass, so Medium severity is appropriate.
+This is a governance liveness and accounting-integrity issue rather than direct fund theft, so Medium severity is appropriate.
 
 ## Likelihood
 
 Likelihood is **high**.
 
-Any address with `OPTIMISTIC_PROPOSER_ROLE` can supply an oversized description immediately, and the duplication path is automatic if the proposal reaches the confirmation lane.
+The behavior is inherent to the current design whenever deposits are made without delegation, which is a normal and permissionless user path.
 
 ## Severity Rationale
 
 ### Why Impact is Medium
 
-The impact is **medium** because the protocol stores and duplicates unbounded governance metadata in a way that can raise costs and operational friction during proposal handling.
+The impact is **medium** because the bug can make valid governance proposals fail even when the full delegated electorate supports them. That breaks core governance functionality.
 
 ### Why it is not High
 
-It is **not high** because the bug does not directly alter proposal authorization, vote counting, or fund movement. It bloats storage and execution costs.
+It is **not high** because the issue does not directly transfer value, seize roles, or allow arbitrary execution. It degrades governance liveness and quorum correctness.
 
 ## Proof of Concept
 
@@ -204,12 +130,12 @@ It is **not high** because the bug does not directly alter proposal authorizatio
 
 The standalone PoC demonstrates:
 
-1. an optimistic proposal is created with a 16,384-byte description,
-2. the proposal is accepted despite that unbounded payload,
-3. the proposal is vetoed into the confirmation lane,
-4. the governor derives the confirmation proposal from `Confirmation For: ` plus the entire huge description,
-5. the confirmation proposal is created successfully,
-6. proving oversized descriptions persist and are duplicated across the transition.
+1. a passive staker deposits `20_000_000e18` underlying,
+2. the staker receives the full share balance,
+3. the staker still has `0` standard votes and `0` optimistic votes because they never delegated,
+4. governance quorum nevertheless increases because it counts past total supply,
+5. Alice, Bob, and Carol cast all delegated votes in favor,
+6. the proposal still ends `Defeated` because undelegated supply pushed quorum above the delegated electorate.
 
 ### Test code
 
@@ -441,8 +367,7 @@ abstract contract PocNewBaseExistingVault is PocNewBase {
 }
 ```
 
-### PocUnboundedOptimisticDescriptionStorageBloat.t.sol
-
+### PocUndelegatedDepositQuorumInflation.t.sol
 ```solidity
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
@@ -452,50 +377,54 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import { PocNewBaseNewVault } from "./PocNewBase.t.sol";
 
-contract PocUnboundedOptimisticDescriptionStorageBloatTest is PocNewBaseNewVault {
-    function test_poc_optimisticProposalAcceptsHugeDescriptionAndDefeatDuplicatesItIntoConfirmationLane() public {
-        string memory hugeDescription = _buildLargeDescription(16_384);
+contract PocUndelegatedDepositQuorumInflationTest is PocNewBaseNewVault {
+    function test_poc_undelegatedDepositInflatesQuorumWithoutAddingVotes() public {
+        address passiveStaker = makeAddr("passiveStaker");
+        uint256 passiveDeposit = 20_000_000e18;
+
+        underlying.mint(passiveStaker, passiveDeposit);
+
+        vm.startPrank(passiveStaker);
+        underlying.approve(address(stakingVault), passiveDeposit);
+        stakingVault.deposit(passiveDeposit, passiveStaker);
+        vm.stopPrank();
+
+        assertEq(stakingVault.balanceOf(passiveStaker), passiveDeposit, "passive staker still receives full shares");
+        assertEq(stakingVault.getVotes(passiveStaker), 0, "undelegated shares add no standard voting power");
+        assertEq(stakingVault.getOptimisticVotes(passiveStaker), 0, "undelegated shares add no optimistic voting power");
 
         (address[] memory targets, uint256[] memory values, bytes[] memory calldatas) =
             _singleCall(address(underlying), 0, abi.encodeCall(IERC20.transfer, (alice, 1e18)));
 
-        vm.prank(optimisticProposer);
-        uint256 proposalId = governor.proposeOptimistic(targets, values, calldatas, hugeDescription);
+        vm.prank(alice);
+        uint256 proposalId = governor.propose(targets, values, calldatas, "undelegated quorum inflation");
+
+        uint256 snapshot = governor.proposalSnapshot(proposalId);
+        vm.warp(snapshot + 1);
+        uint256 inflatedQuorum = governor.quorum(snapshot);
+        uint256 totalDelegatedVotes = ALICE_STAKE + BOB_STAKE + CAROL_STAKE;
+
+        assertGt(inflatedQuorum, totalDelegatedVotes, "undelegated supply pushes quorum above all delegated votes");
 
         _warpToActive(proposalId);
 
+        vm.prank(alice);
+        governor.castVote(proposalId, 1);
         vm.prank(bob);
-        governor.castVote(proposalId, 0);
+        governor.castVote(proposalId, 1);
+        vm.prank(carol);
+        governor.castVote(proposalId, 1);
 
-        string memory confirmationDescription = string.concat("Confirmation For: ", hugeDescription);
-        uint256 confirmationProposalId =
-            governor.hashProposal(targets, values, calldatas, keccak256(bytes(confirmationDescription)));
+        (, uint256 forVotes,) = governor.proposalVotes(proposalId);
+        assertEq(forVotes, totalDelegatedVotes, "all delegated stake votes in favor");
+
+        _warpPastDeadline(proposalId);
 
         assertEq(
             uint256(governor.state(proposalId)),
             uint256(IGovernor.ProposalState.Defeated),
-            "optimistic proposal can be defeated even when carrying a huge unbounded description"
+            "proposal still fails because quorum counts undelegated supply"
         );
-        assertEq(
-            uint256(governor.state(confirmationProposalId)),
-            uint256(IGovernor.ProposalState.Pending),
-            "defeat copies the oversized description into a second confirmation proposal"
-        );
-        assertEq(
-            governor.proposalSnapshot(confirmationProposalId),
-            block.timestamp + VOTING_DELAY,
-            "confirmation proposal is created from the duplicated oversized description"
-        );
-    }
-
-    function _buildLargeDescription(uint256 length) internal pure returns (string memory) {
-        bytes memory payload = new bytes(length);
-
-        for (uint256 i = 0; i < length; ++i) {
-            payload[i] = bytes1(uint8(65 + (i % 26)));
-        }
-
-        return string(payload);
     }
 }
 ```
@@ -503,12 +432,11 @@ contract PocUnboundedOptimisticDescriptionStorageBloatTest is PocNewBaseNewVault
 ### Test command
 
 ```powershell
-docker run --rm --entrypoint sh -v "D:\FuckAudit\Governor\Reserve Governor:/work" -w /work ghcr.io/foundry-rs/foundry:latest -lc "forge test --match-path test/poc_new/PocUnboundedOptimisticDescriptionStorageBloat.t.sol -vvv"
+docker run --rm --entrypoint sh -v "D:\FuckAudit\Governor\Reserve Governor:/work" -w /work ghcr.io/foundry-rs/foundry:latest -lc "forge test --match-path test/poc_new/PocUndelegatedDepositQuorumInflation.t.sol -vvv"
 ```
 
 ### Test output
 
 ```text
-[PASS] test_poc_optimisticProposalAcceptsHugeDescriptionAndDefeatDuplicatesItIntoConfirmationLane()
+[PASS] test_poc_undelegatedDepositInflatesQuorumWithoutAddingVotes()
 ```
-

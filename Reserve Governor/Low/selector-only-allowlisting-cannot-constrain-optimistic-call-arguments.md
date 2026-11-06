@@ -1,150 +1,101 @@
-# Undelegated Deposits Inflate Quorum Without Adding Votes
+# Selector-Only Allowlisting Cannot Constrain Optimistic Call Arguments
 
 ## Metadata
 
-- **Number:** #844
-- **Severity:** Medium
-- **Status:** Duplicate
-- **Likelihood:** High
-- **Impact:** High
-- **Created by:** Foundoneblock
-- **Created at:** May 9, 2026 at 6:45 AM
-- **Last updated:** June 2, 2026 at 5:52 AM
-- **Reward:** 0
+| Severity | Likelihood | Impact | Validity |
+|----------|------------|--------|----------|
+| Low | Medium | Medium | confirm |
 
 ## Description
 
-# Audited by [Fajar Arrizki]
+The optimistic selector registry is parameter-blind.
 
-Independent audit notes by Fajar Arrizki. Findings, proof-of-concept references, and impact assessments are documented for manual review.
+It checks only:
 
-_Note: Not all issues are guaranteed to be correct._
+- the target address,
+- and the first 4 bytes of calldata.
 
-# Undelegated Deposits Inflate Quorum Without Adding Votes
----
-**#M-49**
-- Severity: Medium
-- Validity: Tested
-- Likelihood: High
-- Impact: A large passive staker can raise quorum by increasing total share supply while contributing zero delegated voting power, which can push quorum above the entire delegated electorate and make otherwise unanimous governance proposals fail.
+So allowlisting a selector such as `disburse(address,uint256)` does **not** constrain:
 
-## Description
+- who receives funds,
+- how much is transferred,
+- or any other economically critical arguments.
 
-The staking vault separates deposit from delegation.
+That means “safe selector” approval is much weaker than it appears.
 
-Plain deposits mint shares immediately, but voting power only becomes usable after the holder delegates through the standard and optimistic delegation paths.
+The registry is not approving a policy like “small treasury disbursement to a known recipient.”
 
-That would be fine if governance quorum were based on delegated votes.
+It is approving “any call whose first 4 bytes equal this function selector.”
 
-It is not.
-
-`ReserveOptimisticGovernor.quorum(...)` ultimately derives quorum from `token().getPastTotalSupply(...)`, which counts all minted vault shares, including undelegated supply.
-
-So a passive depositor can meaningfully increase the quorum denominator without increasing the votes that any account can actually cast.
-
-The result is a liveness break: governance can become impossible even when every delegated holder votes in favor.
-
-### Deposits mint shares immediately, while delegation is an explicit separate step
+### The registry stores selectors only, not argument policies
 
 ```solidity
-function depositAndDelegate(uint256 assets, address delegatee, address optimisticDelegatee)
-    public
-    returns (uint256 shares)
-{
-    shares = deposit(assets, msg.sender);
-
-    _delegate(msg.sender, delegatee);
-    _delegateOptimistic(msg.sender, optimisticDelegatee);
-}
-
-function getOptimisticVotes(address account) external view returns (uint256) {
-    return optimisticDelegateCheckpoints[account].latest();
+function isAllowed(address target, bytes4 selector) external view returns (bool) {
+    return _allowedSelectors[target].contains(bytes32(selector));
 }
 ```
 
 Source:
-- `contracts/staking/StakingVault.sol:188-196`
-- `contracts/staking/StakingVault.sol:220-221`
+- `contracts/governance/OptimisticSelectorRegistry.sol:68-70`
 
 GitHub permalink:
-- `https://github.com/reserve-protocol/reserve-governor/blob/dc27a68463cec356ff18bbdd3d8edfe9b2534372/contracts/staking/StakingVault.sol#L188-L196`
-- `https://github.com/reserve-protocol/reserve-governor/blob/dc27a68463cec356ff18bbdd3d8edfe9b2534372/contracts/staking/StakingVault.sol#L220-L221`
+- `https://github.com/reserve-protocol/reserve-governor/blob/dc27a68463cec356ff18bbdd3d8edfe9b2534372/contracts/governance/OptimisticSelectorRegistry.sol#L68-L70`
 
-This shows delegation is opt-in behavior layered on top of deposit.
-
-### Quorum is computed from past total supply, not past delegated voting supply
+### Proposal admission checks only the 4-byte prefix
 
 ```solidity
-function quorum(uint256 timepoint)
-    public
-    view
-    override(GovernorUpgradeable, GovernorVotesQuorumFractionUpgradeable)
-    returns (uint256)
-{
-    return Math.max(1, super.quorum(timepoint));
-}
-
-function proposalThreshold()
-    public
-    view
-    override(GovernorUpgradeable, GovernorSettingsUpgradeable)
-    returns (uint256)
-{
-    uint256 proposalThresholdRatio = super.proposalThreshold(); // D18{1}
-
-    // {tok}
-    uint256 supply = Math.max(1, token().getPastTotalSupply(block.timestamp - 1));
+require(
+    target.code.length != 0 && proposal.calldatas[i].length >= 4
+        && selectorRegistry.isAllowed(target, bytes4(proposal.calldatas[i])),
+    IReserveOptimisticGovernor.OptimisticGovernor__InvalidCall(target, proposal.calldatas[i])
+);
 ```
 
 Source:
-- `contracts/governance/ReserveOptimisticGovernor.sol:202-208`
-- `contracts/governance/ReserveOptimisticGovernor.sol:302-314`
+- `contracts/governance/lib/ProposalLib.sol:54-61`
 
 GitHub permalink:
-- `https://github.com/reserve-protocol/reserve-governor/blob/dc27a68463cec356ff18bbdd3d8edfe9b2534372/contracts/governance/ReserveOptimisticGovernor.sol#L202-L208`
-- `https://github.com/reserve-protocol/reserve-governor/blob/dc27a68463cec356ff18bbdd3d8edfe9b2534372/contracts/governance/ReserveOptimisticGovernor.sol#L302-L314`
+- `https://github.com/reserve-protocol/reserve-governor/blob/dc27a68463cec356ff18bbdd3d8edfe9b2534372/contracts/governance/lib/ProposalLib.sol#L54-L61`
 
-Because undelegated shares still expand total share supply, quorum grows even though those shares add no active voting power.
+No argument whitelisting, recipient guard, amount cap, or calldata-shape policy exists here.
 
 ## Root Cause
 
-The root cause is a mismatch between the unit used for governance participation and the unit used for governance quorum.
+The root cause is that the optimistic-call policy is defined at selector granularity only, even though many selectors expose economically unconstrained parameters.
 
 ```text
 root cause:
-- staking deposits mint ERC4626 shares immediately
-- delegation is optional and separate from deposit
-- undelegated shares therefore add zero usable votes
-- governor quorum still keys off past total share supply
-- passive supply can raise quorum without adding any castable voting power
+- selector registry approves target + 4-byte selector only
+- optimistic proposal admission validates only that coarse tuple
+- full calldata remains attacker-controlled beyond the first 4 bytes
+- any economically sensitive parameters inside the allowed function stay unconstrained
 ```
 
 ## Impact
 
 This issue can cause:
 
-- passive capital to dilute governance liveness,
-- unanimous delegated voting blocs to fail quorum anyway,
-- quorum to become meaningfully detached from the set of accounts that can actually vote,
-- and governance operators to misread a healthy total supply increase as healthy governance participation.
+- allowlisted treasury or asset-moving functions to be called with arbitrary recipients and amounts,
+- operator assumptions about “safe approved functions” to fail,
+- and optimistic execution to admit economically dangerous parameterizations of superficially benign selectors.
 
-This is a governance liveness and accounting-integrity issue rather than direct fund theft, so Medium severity is appropriate.
+This is a policy-integrity issue rather than a direct bypass of the current access checks, so Medium severity is appropriate.
 
 ## Likelihood
 
 Likelihood is **high**.
 
-The behavior is inherent to the current design whenever deposits are made without delegation, which is a normal and permissionless user path.
+This is inherent to the design whenever a target selector with meaningful parameters is allowlisted.
 
 ## Severity Rationale
 
 ### Why Impact is Medium
 
-The impact is **medium** because the bug can make valid governance proposals fail even when the full delegated electorate supports them. That breaks core governance functionality.
+The impact is **medium** because the bug widens every allowlisted selector into an argument-unbounded call surface. The registry cannot express the intended economic constraints of the operation.
 
 ### Why it is not High
 
-It is **not high** because the issue does not directly transfer value, seize roles, or allow arbitrary execution. It degrades governance liveness and quorum correctness.
+It is **not high** because the issue still depends on governance choosing to allowlist a target selector and an optimistic proposer being able to use it; it is not an arbitrary outsider bypass of all policy.
 
 ## Proof of Concept
 
@@ -152,12 +103,12 @@ It is **not high** because the issue does not directly transfer value, seize rol
 
 The standalone PoC demonstrates:
 
-1. a passive staker deposits `20_000_000e18` underlying,
-2. the staker receives the full share balance,
-3. the staker still has `0` standard votes and `0` optimistic votes because they never delegated,
-4. governance quorum nevertheless increases because it counts past total supply,
-5. Alice, Bob, and Carol cast all delegated votes in favor,
-6. the proposal still ends `Defeated` because undelegated supply pushed quorum above the delegated electorate.
+1. a treasury-like target holds `25_000e18` underlying,
+2. governance allowlists only the `disburse(address,uint256)` selector,
+3. no recipient or amount policy is encoded in the registry,
+4. an optimistic proposer submits the same allowlisted selector with Alice as recipient and the full balance as amount,
+5. the proposal is accepted and executed successfully,
+6. proving selector-only approval cannot constrain the call’s economic parameters.
 
 ### Test code
 
@@ -389,63 +340,63 @@ abstract contract PocNewBaseExistingVault is PocNewBase {
 }
 ```
 
-### PocUndelegatedDepositQuorumInflation.t.sol
+### Selector-Only Allowlisting Cannot Constrain Optimistic Call Arguments
+
 ```solidity
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import { IGovernor } from "@openzeppelin/contracts/governance/IGovernor.sol";
-import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { IOptimisticSelectorRegistry } from "@interfaces/IOptimisticSelectorRegistry.sol";
+
+import { ParameterizedDisburserMock } from "@mocks/ParameterizedDisburserMock.sol";
 
 import { PocNewBaseNewVault } from "./PocNewBase.t.sol";
 
-contract PocUndelegatedDepositQuorumInflationTest is PocNewBaseNewVault {
-    function test_poc_undelegatedDepositInflatesQuorumWithoutAddingVotes() public {
-        address passiveStaker = makeAddr("passiveStaker");
-        uint256 passiveDeposit = 20_000_000e18;
+contract PocSelectorOnlyAllowlistPermitsArbitraryArgumentsTest is PocNewBaseNewVault {
+    function test_poc_selectorAllowlistCannotConstrainRecipientOrAmount() public {
+        ParameterizedDisburserMock treasury = new ParameterizedDisburserMock(underlying);
+        underlying.mint(address(treasury), 25_000e18);
 
-        underlying.mint(passiveStaker, passiveDeposit);
+        bytes4[] memory selectors = new bytes4[](1);
+        selectors[0] = treasury.disburse.selector;
+        IOptimisticSelectorRegistry.SelectorData[] memory selectorData =
+            new IOptimisticSelectorRegistry.SelectorData[](1);
+        selectorData[0] = IOptimisticSelectorRegistry.SelectorData(address(treasury), selectors);
 
-        vm.startPrank(passiveStaker);
-        underlying.approve(address(stakingVault), passiveDeposit);
-        stakingVault.deposit(passiveDeposit, passiveStaker);
-        vm.stopPrank();
+        (address[] memory allowTargets, uint256[] memory allowValues, bytes[] memory allowCalldatas) = _singleCall(
+            address(registry), 0, abi.encodeCall(registry.registerSelectors, (selectorData))
+        );
+        (, bytes32 allowDescriptionHash) =
+            _proposePassAndQueueStandard(allowTargets, allowValues, allowCalldatas, "whitelist disburse selector only");
+        vm.warp(block.timestamp + TIMELOCK_DELAY + 1);
+        governor.execute(allowTargets, allowValues, allowCalldatas, allowDescriptionHash);
 
-        assertEq(stakingVault.balanceOf(passiveStaker), passiveDeposit, "passive staker still receives full shares");
-        assertEq(stakingVault.getVotes(passiveStaker), 0, "undelegated shares add no standard voting power");
-        assertEq(stakingVault.getOptimisticVotes(passiveStaker), 0, "undelegated shares add no optimistic voting power");
+        uint256 aliceUnderlyingBefore = underlying.balanceOf(alice);
+        (address[] memory targets, uint256[] memory values, bytes[] memory calldatas) = _singleCall(
+            address(treasury), 0, abi.encodeCall(treasury.disburse, (alice, 25_000e18))
+        );
 
-        (address[] memory targets, uint256[] memory values, bytes[] memory calldatas) =
-            _singleCall(address(underlying), 0, abi.encodeCall(IERC20.transfer, (alice, 1e18)));
-
-        vm.prank(alice);
-        uint256 proposalId = governor.propose(targets, values, calldatas, "undelegated quorum inflation");
-
-        uint256 snapshot = governor.proposalSnapshot(proposalId);
-        vm.warp(snapshot + 1);
-        uint256 inflatedQuorum = governor.quorum(snapshot);
-        uint256 totalDelegatedVotes = ALICE_STAKE + BOB_STAKE + CAROL_STAKE;
-
-        assertGt(inflatedQuorum, totalDelegatedVotes, "undelegated supply pushes quorum above all delegated votes");
+        vm.prank(optimisticProposer);
+        uint256 proposalId = governor.proposeOptimistic(
+            targets,
+            values,
+            calldatas,
+            "selector allowlist accepts arbitrary recipient and amount parameters"
+        );
 
         _warpToActive(proposalId);
-
-        vm.prank(alice);
-        governor.castVote(proposalId, 1);
-        vm.prank(bob);
-        governor.castVote(proposalId, 1);
-        vm.prank(carol);
-        governor.castVote(proposalId, 1);
-
-        (, uint256 forVotes,) = governor.proposalVotes(proposalId);
-        assertEq(forVotes, totalDelegatedVotes, "all delegated stake votes in favor");
-
         _warpPastDeadline(proposalId);
+        governor.execute(
+            targets,
+            values,
+            calldatas,
+            keccak256(bytes("selector allowlist accepts arbitrary recipient and amount parameters"))
+        );
 
         assertEq(
-            uint256(governor.state(proposalId)),
-            uint256(IGovernor.ProposalState.Defeated),
-            "proposal still fails because quorum counts undelegated supply"
+            underlying.balanceOf(alice),
+            aliceUnderlyingBefore + 25_000e18,
+            "selector-only allowlist cannot constrain the economic parameters of the call"
         );
     }
 }
@@ -454,12 +405,12 @@ contract PocUndelegatedDepositQuorumInflationTest is PocNewBaseNewVault {
 ### Test command
 
 ```powershell
-docker run --rm --entrypoint sh -v "D:\FuckAudit\Governor\Reserve Governor:/work" -w /work ghcr.io/foundry-rs/foundry:latest -lc "forge test --match-path test/poc_new/PocUndelegatedDepositQuorumInflation.t.sol -vvv"
+docker run --rm --entrypoint sh -v "D:\FuckAudit\Governor\Reserve Governor:/work" -w /work ghcr.io/foundry-rs/foundry:latest -lc "forge test --match-path test/poc_new/PocSelectorOnlyAllowlistPermitsArbitraryArguments.t.sol -vvv"
 ```
 
 ### Test output
 
 ```text
-[PASS] test_poc_undelegatedDepositInflatesQuorumWithoutAddingVotes()
+[PASS] test_poc_selectorAllowlistCannotConstrainRecipientOrAmount()
 ```
 

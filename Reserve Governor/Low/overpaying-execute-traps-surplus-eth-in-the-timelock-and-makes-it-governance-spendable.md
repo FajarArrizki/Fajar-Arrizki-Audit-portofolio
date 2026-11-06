@@ -1,122 +1,130 @@
-# Selector-Only Allowlisting Cannot Constrain Optimistic Call Arguments
+# Overpaying execute Traps Surplus ETH in the Timelock and Makes It Governance-Spendable
 
 ## Metadata
 
-- **Number:** #840
-- **Severity:** Low
-- **Status:** Duplicate
-- **Likelihood:** Medium
-- **Impact:** Medium
-- **Created by:** Foundoneblock
-- **Created at:** May 9, 2026 at 6:34 AM
-- **Last updated:** June 2, 2026 at 5:44 AM
+| Severity | Likelihood | Impact | Validity |
+|----------|------------|--------|----------|
+| Low | Medium | Medium | confirm |
 
 ## Description
 
-# Audited by [Fajar Arrizki]
+Optimistic and pessimistic execution both forward ETH through the timelock, but the system never reconciles `msg.value` against the sum of `values[]`.
 
-Independent audit notes by Fajar Arrizki. Findings, proof-of-concept references, and impact assessments are documented for manual review.
+For the optimistic path, `_executeOperations()` forwards the full `msg.value` into `executeBatchBypass(...)`.
 
-_Note: Not all issues are guaranteed to be correct._
+If the batch itself uses zero ETH, the surplus is not refunded. It simply remains in the timelock balance.
 
-# Selector-Only Allowlisting Cannot Constrain Optimistic Call Arguments
----
-**#M-45**
-- Severity: Medium
-- Validity: Tested
-- Likelihood: High
-- Impact: Once a target selector is allowlisted, optimistic proposals can supply arbitrary recipient and amount parameters to that function, so the registry cannot constrain the economic meaning of approved optimistic calls.
+That trapped ETH is not isolated.
 
-## Description
+Any later successful governance execution can spend it by proposing a nonzero `values[i]` to an arbitrary target.
 
-The optimistic selector registry is parameter-blind.
+So an overpaid execution silently converts accidental or malicious overpayment into future governance-controlled treasury value.
 
-It checks only:
-
-- the target address,
-- and the first 4 bytes of calldata.
-
-So allowlisting a selector such as `disburse(address,uint256)` does **not** constrain:
-
-- who receives funds,
-- how much is transferred,
-- or any other economically critical arguments.
-
-That means “safe selector” approval is much weaker than it appears.
-
-The registry is not approving a policy like “small treasury disbursement to a known recipient.”
-
-It is approving “any call whose first 4 bytes equal this function selector.”
-
-### The registry stores selectors only, not argument policies
+### Optimistic execution forwards the entire `msg.value`
 
 ```solidity
-function isAllowed(address target, bytes4 selector) external view returns (bool) {
-    return _allowedSelectors[target].contains(bytes32(selector));
+function _executeOperations(
+    uint256 proposalId,
+    address[] memory targets,
+    uint256[] memory values,
+    bytes[] memory calldatas,
+    bytes32 descriptionHash
+) internal override(GovernorUpgradeable, GovernorTimelockControlUpgradeable) {
+    if (_isOptimistic(proposalId)) {
+        // optimistic case: execute immediately
+
+        _timelock().executeBatchBypass{ value: msg.value }(
+            targets, values, calldatas, 0, bytes20(address(this)) ^ descriptionHash
+        );
+    } else {
+        // pessimistic case: execute through timelock
+
+        super._executeOperations(proposalId, targets, values, calldatas, descriptionHash);
+    }
 }
 ```
 
 Source:
-- `contracts/governance/OptimisticSelectorRegistry.sol:68-70`
+- `contracts/governance/ReserveOptimisticGovernor.sol:345-362`
 
 GitHub permalink:
-- `https://github.com/reserve-protocol/reserve-governor/blob/dc27a68463cec356ff18bbdd3d8edfe9b2534372/contracts/governance/OptimisticSelectorRegistry.sol#L68-L70`
+- `https://github.com/reserve-protocol/reserve-governor/blob/dc27a68463cec356ff18bbdd3d8edfe9b2534372/contracts/governance/ReserveOptimisticGovernor.sol#L345-L362`
 
-### Proposal admission checks only the 4-byte prefix
+No equality check is enforced between forwarded ETH and the economic value encoded in `values[]`.
+
+### The timelock bypass path marks ready and executes, but never refunds surplus ETH
 
 ```solidity
-require(
-    target.code.length != 0 && proposal.calldatas[i].length >= 4
-        && selectorRegistry.isAllowed(target, bytes4(proposal.calldatas[i])),
-    IReserveOptimisticGovernor.OptimisticGovernor__InvalidCall(target, proposal.calldatas[i])
-);
+function executeBatchBypass(
+    address[] calldata targets,
+    uint256[] calldata values,
+    bytes[] calldata payloads,
+    bytes32 predecessor,
+    bytes32 salt
+) public payable onlyRole(PROPOSER_ROLE) {
+    bytes32 id = hashOperationBatch(targets, values, payloads, predecessor, salt);
+
+    TimelockControllerStorage storage $ = _getTimelockControllerStorage();
+
+    // mark Ready
+    require($._timestamps[id] == 0, TimelockControllerOptimistic__OperationConflict());
+    $._timestamps[id] = block.timestamp;
+
+    // check caller has EXECUTOR_ROLE and execute
+    executeBatch(targets, values, payloads, predecessor, salt);
+}
 ```
 
 Source:
-- `contracts/governance/lib/ProposalLib.sol:54-61`
+- `contracts/governance/TimelockControllerOptimistic.sol:76-92`
 
 GitHub permalink:
-- `https://github.com/reserve-protocol/reserve-governor/blob/dc27a68463cec356ff18bbdd3d8edfe9b2534372/contracts/governance/lib/ProposalLib.sol#L54-L61`
+- `https://github.com/reserve-protocol/reserve-governor/blob/dc27a68463cec356ff18bbdd3d8edfe9b2534372/contracts/governance/TimelockControllerOptimistic.sol#L76-L92`
 
-No argument whitelisting, recipient guard, amount cap, or calldata-shape policy exists here.
+There is no refund path here and no explicit sum check for batch value consumption.
 
 ## Root Cause
 
-The root cause is that the optimistic-call policy is defined at selector granularity only, even though many selectors expose economically unconstrained parameters.
+The root cause is that governance execution treats incoming ETH as ambient timelock funding instead of exact proposal-scoped payment.
 
 ```text
 root cause:
-- selector registry approves target + 4-byte selector only
-- optimistic proposal admission validates only that coarse tuple
-- full calldata remains attacker-controlled beyond the first 4 bytes
-- any economically sensitive parameters inside the allowed function stay unconstrained
+- governor forwards full msg.value into timelock execution
+- timelock does not reconcile msg.value against values[]
+- unused ETH remains on the timelock balance
+- later governance executions can spend that trapped ETH with unrelated proposals
 ```
 
 ## Impact
 
 This issue can cause:
 
-- allowlisted treasury or asset-moving functions to be called with arbitrary recipients and amounts,
-- operator assumptions about “safe approved functions” to fail,
-- and optimistic execution to admit economically dangerous parameterizations of superficially benign selectors.
+- accidental ETH overpayment during execution to become trapped,
+- trapped ETH to become silently governance-spendable by unrelated later proposals,
+- executors and operators to misattribute proposal value consumption,
+- and governance to gain an implicit ETH treasury that was never part of the original proposal payload.
 
-This is a policy-integrity issue rather than a direct bypass of the current access checks, so Medium severity is appropriate.
+This is a treasury/accounting integrity issue rather than an unprivileged direct theft path, so Medium severity is appropriate.
 
 ## Likelihood
 
-Likelihood is **high**.
+Likelihood is **medium**.
 
-This is inherent to the design whenever a target selector with meaningful parameters is allowlisted.
+The path requires either:
+
+- an overpaying executor,
+- or intentional overpayment by a caller,
+- and later governance control to redirect the trapped ETH.
 
 ## Severity Rationale
 
 ### Why Impact is Medium
 
-The impact is **medium** because the bug widens every allowlisted selector into an argument-unbounded call surface. The registry cannot express the intended economic constraints of the operation.
+The impact is **medium** because surplus ETH can be trapped and then later redirected by governance to arbitrary recipients. It is real value flow, not just a cosmetic accounting mismatch.
 
 ### Why it is not High
 
-It is **not high** because the issue still depends on governance choosing to allowlist a target selector and an optimistic proposer being able to use it; it is not an arbitrary outsider bypass of all policy.
+It is **not high** because the exploit still depends on governance execution authority; an arbitrary external attacker cannot directly drain the timelock without a successful proposal path.
 
 ## Proof of Concept
 
@@ -124,12 +132,12 @@ It is **not high** because the issue still depends on governance choosing to all
 
 The standalone PoC demonstrates:
 
-1. a treasury-like target holds `25_000e18` underlying,
-2. governance allowlists only the `disburse(address,uint256)` selector,
-3. no recipient or amount policy is encoded in the registry,
-4. an optimistic proposer submits the same allowlisted selector with Alice as recipient and the full balance as amount,
-5. the proposal is accepted and executed successfully,
-6. proving selector-only approval cannot constrain the call’s economic parameters.
+1. a standard proposal is queued with `values = [0]`,
+2. execution is intentionally overpaid with `1 ether`,
+3. the proposal executes successfully,
+4. the full surplus remains trapped on the timelock balance,
+5. a later proposal sends that same trapped ETH to Bob,
+6. proving the surplus became unrelated governance-spendable value.
 
 ### Test code
 
@@ -361,64 +369,46 @@ abstract contract PocNewBaseExistingVault is PocNewBase {
 }
 ```
 
-### Selector-Only Allowlisting Cannot Constrain Optimistic Call Arguments
+###  Overpaying execute Traps Surplus ETH in the Timelock and Makes It Governance-Spendable
 
 ```solidity
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
+pragma abicoder v2;
 
-import { IOptimisticSelectorRegistry } from "@interfaces/IOptimisticSelectorRegistry.sol";
-
-import { ParameterizedDisburserMock } from "@mocks/ParameterizedDisburserMock.sol";
+import { IGovernor } from "@openzeppelin/contracts/governance/IGovernor.sol";
 
 import { PocNewBaseNewVault } from "./PocNewBase.t.sol";
 
-contract PocSelectorOnlyAllowlistPermitsArbitraryArgumentsTest is PocNewBaseNewVault {
-    function test_poc_selectorAllowlistCannotConstrainRecipientOrAmount() public {
-        ParameterizedDisburserMock treasury = new ParameterizedDisburserMock(underlying);
-        underlying.mint(address(treasury), 25_000e18);
+contract PocTimelockExcessEthTrapTest is PocNewBaseNewVault {
+    function test_poc_excessMsgValueGetsTrappedAndLaterSpentFromTimelock() public {
+        uint256 trappedEth = 1 ether;
 
-        bytes4[] memory selectors = new bytes4[](1);
-        selectors[0] = treasury.disburse.selector;
-        IOptimisticSelectorRegistry.SelectorData[] memory selectorData =
-            new IOptimisticSelectorRegistry.SelectorData[](1);
-        selectorData[0] = IOptimisticSelectorRegistry.SelectorData(address(treasury), selectors);
+        (address[] memory trapTargets, uint256[] memory trapValues, bytes[] memory trapCalldatas) =
+            _singleCall(bob, 0, bytes(""));
 
-        (address[] memory allowTargets, uint256[] memory allowValues, bytes[] memory allowCalldatas) = _singleCall(
-            address(registry), 0, abi.encodeCall(registry.registerSelectors, (selectorData))
+        (uint256 trapProposalId, bytes32 trapDescriptionHash) = _proposePassAndQueueStandard(
+            trapTargets, trapValues, trapCalldatas, "queue zero-value call then overpay execute"
         );
-        (, bytes32 allowDescriptionHash) =
-            _proposePassAndQueueStandard(allowTargets, allowValues, allowCalldatas, "whitelist disburse selector only");
+
         vm.warp(block.timestamp + TIMELOCK_DELAY + 1);
-        governor.execute(allowTargets, allowValues, allowCalldatas, allowDescriptionHash);
+        governor.execute{ value: trappedEth }(trapTargets, trapValues, trapCalldatas, trapDescriptionHash);
 
-        uint256 aliceUnderlyingBefore = underlying.balanceOf(alice);
-        (address[] memory targets, uint256[] memory values, bytes[] memory calldatas) = _singleCall(
-            address(treasury), 0, abi.encodeCall(treasury.disburse, (alice, 25_000e18))
-        );
+        assertEq(uint256(governor.state(trapProposalId)), uint256(IGovernor.ProposalState.Executed));
+        assertEq(address(timelock).balance, trappedEth, "surplus ETH should remain trapped in timelock");
 
-        vm.prank(optimisticProposer);
-        uint256 proposalId = governor.proposeOptimistic(
-            targets,
-            values,
-            calldatas,
-            "selector allowlist accepts arbitrary recipient and amount parameters"
-        );
+        uint256 bobEthBefore = bob.balance;
+        (address[] memory drainTargets, uint256[] memory drainValues, bytes[] memory drainCalldatas) =
+            _singleCall(bob, trappedEth, bytes(""));
 
-        _warpToActive(proposalId);
-        _warpPastDeadline(proposalId);
-        governor.execute(
-            targets,
-            values,
-            calldatas,
-            keccak256(bytes("selector allowlist accepts arbitrary recipient and amount parameters"))
-        );
+        (, bytes32 drainDescriptionHash) =
+            _proposePassAndQueueStandard(drainTargets, drainValues, drainCalldatas, "spend previously trapped ETH");
 
-        assertEq(
-            underlying.balanceOf(alice),
-            aliceUnderlyingBefore + 25_000e18,
-            "selector-only allowlist cannot constrain the economic parameters of the call"
-        );
+        vm.warp(block.timestamp + TIMELOCK_DELAY + 1);
+        governor.execute(drainTargets, drainValues, drainCalldatas, drainDescriptionHash);
+
+        assertEq(bob.balance, bobEthBefore + trappedEth, "later governance execution can spend trapped ETH");
+        assertEq(address(timelock).balance, 0, "timelock surplus should be fully drainable by later proposal");
     }
 }
 ```
@@ -426,12 +416,12 @@ contract PocSelectorOnlyAllowlistPermitsArbitraryArgumentsTest is PocNewBaseNewV
 ### Test command
 
 ```powershell
-docker run --rm --entrypoint sh -v "D:\FuckAudit\Governor\Reserve Governor:/work" -w /work ghcr.io/foundry-rs/foundry:latest -lc "forge test --match-path test/poc_new/PocSelectorOnlyAllowlistPermitsArbitraryArguments.t.sol -vvv"
+docker run --rm --entrypoint sh -v "D:\FuckAudit\Governor\Reserve Governor:/work" -w /work ghcr.io/foundry-rs/foundry:latest -lc "forge test --match-path test/poc_new/PocTimelockExcessEthTrap.t.sol -vvv"
 ```
 
 ### Test output
 
 ```text
-[PASS] test_poc_selectorAllowlistCannotConstrainRecipientOrAmount()
+[PASS] test_poc_excessMsgValueGetsTrappedAndLaterSpentFromTimelock()
 ```
 

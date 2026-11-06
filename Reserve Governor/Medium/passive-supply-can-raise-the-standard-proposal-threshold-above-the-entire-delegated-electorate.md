@@ -1,102 +1,79 @@
-# Passive Supply Can Make the Optimistic Veto Threshold Unreachable for the Entire Delegated Electorate
+# Passive Supply Can Raise the Standard Proposal Threshold Above the Entire Delegated Electorate
 
 ## Metadata
 
-- **Number:** #1035
-- **Severity:** Medium
-- **Status:** Duplicate
-- **Likelihood:** High
-- **Impact:** High
-- **Created by:** Foundoneblock
-- **Created at:** May 10, 2026 at 3:26 AM
-- **Last updated:** June 2, 2026 at 5:52 AM
+| Severity | Likelihood | Impact | Validity |
+|----------|------------|--------|----------|
+| Medium | High | High | confirm |
 
 ## Description
 
-# Audited by [Fajar Arrizki]
+The standard proposal threshold is computed from total historical supply, but proposer eligibility is checked against delegated standard votes.
 
-Independent audit notes by Fajar Arrizki. Findings, proof-of-concept references, and impact assessments are documented for manual review.
+That means passive supply still increases the threshold even when it contributes no standard voting power at all.
 
-_Note: Not all issues are guaranteed to be correct._
+So the system can become economically capitalized but politically illiquid: no delegated voter can satisfy the proposer gate, even though the vault still holds large real stake.
 
-# Passive Supply Can Make the Optimistic Veto Threshold Unreachable for the Entire Delegated Electorate
----
-**#M-73**
-- Severity: Medium
-- Validity: Tested
-- Likelihood: Medium
-- Impact: A large passive holder can increase the optimistic veto threshold through total supply without contributing any optimistic voting power, allowing fast-lane proposals to succeed even when the entire delegated veto electorate opposes them.
-
-## Description
-
-The optimistic lane computes its veto threshold from total historical supply, but actual veto power is counted from the separate optimistic delegation ledger.
-
-That means a holder can remain economically large while contributing zero castable optimistic veto votes, because optimistic voting power is only created when the holder actively delegates optimistic votes.
-
-So the system can reach a state where the full delegated veto electorate votes `Against`, but still cannot defeat the proposal because passive supply has raised the denominator too far.
-
-### The optimistic veto threshold is derived from total supply while veto votes come from the optimistic delegation ledger
+### The standard proposal threshold is supply-based while proposer eligibility is vote-based
 
 ```solidity
-uint256 pastSupply = token().getPastTotalSupply(snapshot);
+function proposalThreshold()
+    public
+    view
+    override(GovernorUpgradeable, GovernorSettingsUpgradeable)
+    returns (uint256)
+{
+    uint256 proposalThresholdRatio = super.proposalThreshold();
 
-if (pastSupply == 0) {
-    return ProposalState.Canceled;
-}
+    uint256 supply = Math.max(1, token().getPastTotalSupply(block.timestamp - 1));
 
-uint256 vetoThresholdTok = (_vetoThreshold * pastSupply) / 1e18;
-vetoThresholdTok = Math.max(vetoThresholdTok, 1);
-
-(uint256 againstVotes,,) = proposalVotes(proposalId);
-
-if (againstVotes >= vetoThresholdTok) {
-    return ProposalState.Defeated;
+    return (proposalThresholdRatio * supply + (1e18 - 1)) / 1e18;
 }
 ```
 
 Source:
-- `contracts/governance/ReserveOptimisticGovernor.sol:249-263`
+- `contracts/governance/ReserveOptimisticGovernor.sol:302-314`
 
 GitHub permalink:
-- `https://github.com/reserve-protocol/reserve-governor/blob/dc27a68463cec356ff18bbdd3d8edfe9b2534372/contracts/governance/ReserveOptimisticGovernor.sol#L249-L263`
+- `https://github.com/reserve-protocol/reserve-governor/blob/dc27a68463cec356ff18bbdd3d8edfe9b2534372/contracts/governance/ReserveOptimisticGovernor.sol#L302-L314`
 
 ## Root Cause
 
-The root cause is that the fast-lane veto threshold is keyed to total supply, while veto authority is keyed to delegated optimistic votes.
+The root cause is that standard proposal admission depends on two different accounting systems that can diverge structurally.
 
 ```text
 root cause:
-- optimistic veto threshold uses total token supply at the proposal snapshot
-- optimistic voting power uses a separate optimistic delegation checkpoint system
-- passive holders increase the denominator even when they do not contribute any veto power
-- delegated veto voters can therefore become structurally unable to defeat a proposal
+- proposal threshold is computed from total supply
+- proposer eligibility is checked from delegated standard votes
+- passive holders increase the threshold even when they contribute zero delegated voting power
+- a large passive holder can therefore make the standard lane unreachable for all active delegates
 ```
 
 ## Impact
 
 This issue can cause:
 
-- fast-lane proposals to succeed even when the full delegated veto electorate opposes them,
-- passive capital to harden optimistic execution without taking any active governance responsibility,
-- and governance liveness to shift toward optimistic proposers whenever delegation participation lags behind economic ownership.
+- the standard governance lane to become unreachable for all delegated voters,
+- governance agenda-setting to concentrate in the hands of whichever actors still control large delegated blocs,
+- and economic adoption of the vault to actively reduce political usability of the slow lane.
 
-This is a governance-control issue with real pass/fail consequences, so Medium severity is appropriate.
+This is a real governance-liveness failure with proposal admission consequences, so Medium severity is appropriate.
 
 ## Likelihood
 
 Likelihood is **medium**.
 
-The path does not require privileged roles or custom token behavior. It only requires a sufficiently large passive stake to remain undelegated on the optimistic ledger while a smaller active electorate attempts to veto.
+The path only requires a plausible distribution where most stake is held passively and only a small subset is actively delegated for standard voting.
 
 ## Severity Rationale
 
 ### Why Impact is Medium
 
-The impact is **medium** because the defect can directly change whether an optimistic proposal is vetoable, which is one of the core safety boundaries of the fast lane.
+The impact is **medium** because it can block the creation of standard proposals entirely, which is a core liveness property of the governance system.
 
 ### Why it is not High
 
-It is **not high** because the issue does not directly grant new voting power, seize funds, or bypass all governance controls. It distorts veto reachability, but still requires an existing proposal and an unfavorable stake/delegation distribution.
+It is **not high** because the issue does not immediately transfer control or seize assets; it degrades proposal admission and political accessibility rather than directly bypassing governance.
 
 ## Proof of Concept
 
@@ -104,11 +81,11 @@ It is **not high** because the issue does not directly grant new voting power, s
 
 The standalone PoC demonstrates:
 
-1. a large passive holder can own most of the supply without any optimistic delegation,
-2. a smaller set of active veto voters can hold all delegated optimistic votes,
-3. the optimistic veto threshold still scales with the passive holder’s supply,
-4. the full delegated veto electorate can vote `Against`,
-5. yet the proposal still succeeds because the computed threshold remains above all available delegated veto votes.
+1. a large passive holder can own almost all supply without any standard delegation,
+2. only a tiny delegated electorate remains,
+3. the proposal threshold still scales with the passive holder’s supply,
+4. the entire delegated electorate can sit below the threshold,
+5. and even the only delegated voter can no longer create a standard proposal.
 
 ## Proof of Concept
 
@@ -645,67 +622,47 @@ abstract contract PocTestNewBase is Test {
 }
 ```
 
-### PocF01_OptimisticVetoPassiveSupply.t.sol
+### PocF02_ProposalThresholdPassiveSupply.t.sol
 ```solidity
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IERC20Metadata } from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
-
 import { MockERC20 } from "@mocks/MockERC20.sol";
-import { NoopTarget, PocTestNewBase } from "./PocTestNewBase.t.sol";
+import { PocTestNewBase } from "./PocTestNewBase.t.sol";
 
-contract PocF01_OptimisticVetoPassiveSupply_Test is PocTestNewBase {
-    uint256 internal constant PASSIVE_ALICE = 900e18;
-    uint256 internal constant DELEGATED_BOB = 50e18;
-    uint256 internal constant DELEGATED_CAROL = 50e18;
+contract PocF02_ProposalThresholdPassiveSupply_Test is PocTestNewBase {
+    uint256 internal constant PASSIVE_ALICE = 999e18;
+    uint256 internal constant DELEGATED_BOB = 1e18;
 
     function setUp() public {
         underlying = new MockERC20("Underlying Token", "UNDL");
         _deployWithUnderlying(IERC20Metadata(address(underlying)), 0);
 
         _depositPassive(alice, PASSIVE_ALICE);
-        _depositAndDelegateOptimistic(bob, DELEGATED_BOB);
-        _depositAndDelegateOptimistic(carol, DELEGATED_CAROL);
+        _depositAndDelegateStandard(bob, DELEGATED_BOB);
 
         vm.warp(block.timestamp + 12 hours);
     }
 
-    function test_F01_passiveSupplyInflatesOptimisticVetoThresholdAboveEntireDelegatedElectorate() public {
-        NoopTarget target = new NoopTarget();
-        _registerOptimisticSelector(address(target), target.touch.selector);
+    function test_F02_passiveSupplyRaisesProposalThresholdAboveEntireDelegatedElectorate() public {
+        uint256 threshold = governor.proposalThreshold();
+        uint256 totalSupply = stakingVault.getPastTotalSupply(block.timestamp - 1);
+        uint256 aliceVotes = stakingVault.getVotes(alice);
+        uint256 bobVotes = stakingVault.getVotes(bob);
+
+        assertEq(totalSupply, PASSIVE_ALICE + DELEGATED_BOB);
+        assertEq(aliceVotes, 0, "passive holder has no standard votes");
+        assertEq(bobVotes, DELEGATED_BOB, "only bob is in the delegated electorate");
+        assertGt(threshold, bobVotes, "proposal threshold should exceed the entire delegated electorate");
 
         (address[] memory targets, uint256[] memory values, bytes[] memory calldatas) =
-            _singleCall(address(target), 0, abi.encodeCall(target.touch, ()));
-
-        vm.prank(optimisticProposer);
-        uint256 proposalId = governor.proposeOptimistic(targets, values, calldatas, "passive supply veto inflation");
-
-        _warpToActive(proposalId);
-
-        uint256 snapshot = governor.proposalSnapshot(proposalId);
-        uint256 pastSupply = stakingVault.getPastTotalSupply(snapshot);
-        uint256 bobVotes = stakingVault.getPastOptimisticVotes(bob, snapshot);
-        uint256 carolVotes = stakingVault.getPastOptimisticVotes(carol, snapshot);
-        uint256 totalDelegatedVetoVotes = bobVotes + carolVotes;
-        uint256 vetoThresholdTok = (governor.vetoThreshold(proposalId) * pastSupply) / 1e18;
-        if (vetoThresholdTok == 0) vetoThresholdTok = 1;
-
-        assertEq(pastSupply, PASSIVE_ALICE + DELEGATED_BOB + DELEGATED_CAROL);
-        assertEq(totalDelegatedVetoVotes, DELEGATED_BOB + DELEGATED_CAROL);
-        assertGt(vetoThresholdTok, totalDelegatedVetoVotes, "passive supply should lift veto threshold above all delegated veto votes");
+            _singleCall(address(underlying), 0, abi.encodeCall(IERC20.transfer, (alice, 1)));
 
         vm.prank(bob);
-        governor.castVote(proposalId, 0);
-        vm.prank(carol);
-        governor.castVote(proposalId, 0);
-
-        (uint256 againstVotes,,) = governor.proposalVotes(proposalId);
-        assertEq(againstVotes, totalDelegatedVetoVotes, "entire delegated electorate vetoed");
-        assertLt(againstVotes, vetoThresholdTok, "veto still cannot reach inflated threshold");
-
-        _warpPastDeadline(proposalId);
-        assertEq(uint256(governor.state(proposalId)), uint256(0x4), "proposal still succeeds despite unanimous delegated veto");
+        vm.expectRevert();
+        governor.propose(targets, values, calldatas, "passive supply proposer freeze");
     }
 
     function _depositPassive(address voter, uint256 amount) internal {
@@ -716,11 +673,12 @@ contract PocF01_OptimisticVetoPassiveSupply_Test is PocTestNewBase {
         vm.stopPrank();
     }
 
-    function _depositAndDelegateOptimistic(address voter, uint256 amount) internal {
+    function _depositAndDelegateStandard(address voter, uint256 amount) internal {
         underlying.mint(voter, amount);
         vm.startPrank(voter);
         underlying.approve(address(stakingVault), amount);
-        stakingVault.depositAndDelegate(amount, address(0), voter);
+        stakingVault.deposit(amount, voter);
+        stakingVault.delegate(voter);
         vm.stopPrank();
     }
 }
@@ -728,11 +686,11 @@ contract PocF01_OptimisticVetoPassiveSupply_Test is PocTestNewBase {
 
 ### Output Test
 ```text
-[PASS] test_F01_passiveSupplyInflatesOptimisticVetoThresholdAboveEntireDelegatedElectorate()
+[PASS] test_F02_passiveSupplyRaisesProposalThresholdAboveEntireDelegatedElectorate()
 ```
 
 ## Recommended Mitigation
-- Base the optimistic veto threshold on optimistic delegated supply rather than total supply.
-- Alternatively, require the optimistic lane to use a denominator that reflects only castable optimistic voting power.
-- If total supply must remain the denominator, explicitly require automatic optimistic self-delegation on deposit so passive supply cannot silently dilute veto reachability.
+- Base the standard proposal threshold on delegated standard voting power rather than total supply.
+- Alternatively, require self-delegation on deposit or enforce an active-vote denominator for proposal admission.
+- If total supply must remain the threshold denominator, document the governance freeze risk explicitly and add operational safeguards around passive-supply accumulation.
 

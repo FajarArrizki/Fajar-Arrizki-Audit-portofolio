@@ -2,30 +2,9 @@
 
 ## Metadata
 
-- **Number:** #795
-- **Severity:** Low
-- **Status:** Duplicate
-- **Likelihood:** High
-- **Impact:** High
-- **Created by:** Foundoneblock
-- **Created at:** May 9, 2026 at 12:59 AM
-- **Last updated:** June 2, 2026 at 5:44 AM
-
-## Description
-
-# Audited by [Fajar Arrizki]
-
-Independent audit notes by Fajar Arrizki. Findings, proof-of-concept references, and impact assessments are documented for manual review.
-
-_Note: Not all issues are guaranteed to be correct._
-
-# maxWithdraw and maxRedeem Ignore Delayed Unstaking and Overstate Immediate Liquidity
----
-**#M-33**
-- Severity: Medium
-- Validity: Tested
-- Likelihood: Medium
-- Impact: ERC4626 integrations can read `maxWithdraw()` and `maxRedeem()` as if the user can receive assets immediately, while the actual vault burns shares and creates a delayed-unstake lock instead of transferring underlying, overstating immediate liquidity and breaking adapter assumptions
+| Severity | Likelihood | Impact | Validity |
+|----------|------------|--------|----------|
+| Low | High | High | confirm |
 
 ## Description
 

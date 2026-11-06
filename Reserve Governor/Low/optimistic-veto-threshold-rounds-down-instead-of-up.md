@@ -2,30 +2,9 @@
 
 ## Metadata
 
-- **Number:** #752
-- **Severity:** Low
-- **Status:** Duplicate
-- **Likelihood:** Medium
-- **Impact:** Medium
-- **Created by:** Foundoneblock
-- **Created at:** May 8, 2026 at 9:11 PM
-- **Last updated:** June 2, 2026 at 5:44 AM
-
-## Description
-
-# Audited by [Fajar Arrizki]
-
-Independent audit notes by Fajar Arrizki. Findings, proof-of-concept references, and impact assessments are documented for manual review.
-
-_Note: Not all issues are guaranteed to be correct._
-
-# Optimistic Veto Threshold Rounds Down Instead of Up
----
-**#M-23**
-- Severity: Medium
-- Validity: Tested
-- Likelihood: Medium
-- Impact: Fractional optimistic veto thresholds are rounded down, letting fewer AGAINST votes than documented defeat fast proposals and force confirmation votes early
+| Severity | Likelihood | Impact | Validity |
+|----------|------------|--------|----------|
+| Low | Medium | Medium | confirm |
 
 ## Description
 

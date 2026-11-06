@@ -2,30 +2,9 @@
 
 ## Metadata
 
-- **Number:** #848
-- **Severity:** Low
-- **Status:** Duplicate
-- **Likelihood:** Medium
-- **Impact:** Medium
-- **Created by:** Foundoneblock
-- **Created at:** May 9, 2026 at 6:50 AM
-- **Last updated:** May 31, 2026 at 10:39 PM
-
-## Description
-
-# Audited by [Fajar Arrizki]
-
-Independent audit notes by Fajar Arrizki. Findings, proof-of-concept references, and impact assessments are documented for manual review.
-
-_Note: Not all issues are guaranteed to be correct._
-
-# Small Reward Dust Can Become Permanently Unclaimable
----
-**#M-52**
-- Severity: Medium
-- Validity: Tested
-- Likelihood: High
-- Impact: Very small reward balances can advance payout windows without ever incrementing the global reward index, which strands reward inventory permanently inside the vault and makes exact reward accounting impossible for affected reward units.
+| Severity | Likelihood | Impact | Validity |
+|----------|------------|--------|----------|
+| Low | Medium | Medium | confirm |
 
 ## Description
 

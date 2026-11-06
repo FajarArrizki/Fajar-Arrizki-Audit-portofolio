@@ -2,31 +2,9 @@
 
 ## Metadata
 
-- **Number:** #141
-- **Severity:** Medium
-- **Status:** Duplicate
-- **Likelihood:** Low
-- **Impact:** High
-- **Created by:** Foundoneblock
-- **Created at:** May 1, 2026 at 5:26 PM
-- **Last updated:** June 11, 2026 at 5:06 AM
-- **Reward:** 85.92
-
-## Description
-
-# Audited by [Fajar Arrizki]
-
-Independent audit notes by Fajar Arrizki. Findings, proof-of-concept references, and impact assessments are documented for manual review.
-
-_Note: Not all issues are guaranteed to be correct._
-
-# Unregistering a Reward Token Plus Permissionless Poke Can Burn Pending Reward Emission Windows
----
-**#M-05**
-- Severity: Medium
-- Validity: Tested
-- Likelihood: Medium
-- Impact: Once a reward token is unregistered, any outsider can permanently zero out elapsed accrual windows by calling `poke()` before re-registration
+| Severity | Likelihood | Impact | Validity |
+|----------|------------|--------|----------|
+| Medium | Low | High | confirm |
 
 ## Description
 

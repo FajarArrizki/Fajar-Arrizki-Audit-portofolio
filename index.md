@@ -10,14 +10,14 @@
 
 Medium severity findings — vulnerabilities with conditional impact, requiring specific preconditions or resulting in indirect losses.
 
-| # | Protocol | Folder | File | Cluster Bug |
-|---|----------|--------|------|-------------|
-| 1 | Reserve Governor | `rg-m-01` | [rg-m-01.md](Reserve%20Governor/Medium/rg-m-01/rg-m-01.md) | Governance / Threshold |
-| 2 | Reserve Governor | `rg-m-02` | [rg-m-02.md](Reserve%20Governor/Medium/rg-m-02/rg-m-02.md) | Governance / Threshold |
-| 3 | Reserve Governor | `rg-m-03` | [rg-m-03.md](Reserve%20Governor/Medium/rg-m-03/rg-m-03.md) | Accounting / Reward Griefing |
-| 4 | Reserve Governor | `rg-m-04` | [rg-m-04.md](Reserve%20Governor/Medium/rg-m-04/rg-m-04.md) | Governance / Quorum Mismatch |
+| ID | Protocol | Finding | Cluster Bug |
+|----|----------|---------|-------------|
+| rg-m-01 | Reserve Governor | [Passive Supply Can Make the Optimistic Veto Threshold Unreachable for the Entire Delegated Electorate](Reserve%20Governor/Medium/passive-supply-can-make-the-optimistic-veto-threshold-unreachable-for-the-entire-delegated-electorate.md) | Governance / Threshold |
+| rg-m-02 | Reserve Governor | [Passive Supply Can Raise the Standard Proposal Threshold Above the Entire Delegated Electorate](Reserve%20Governor/Medium/passive-supply-can-raise-the-standard-proposal-threshold-above-the-entire-delegated-electorate.md) | Governance / Threshold |
+| rg-m-03 | Reserve Governor | [Unregistering a Reward Token Plus Permissionless Poke Can Burn Pending Reward Emission Windows](Reserve%20Governor/Medium/unregistering-a-reward-token-plus-permissionless-poke-can-burn-pending-reward-emission-windows.md) | Accounting / Reward Griefing |
+| rg-m-04 | Reserve Governor | [Undelegated Deposits Inflate Quorum Without Adding Votes](Reserve%20Governor/Medium/undelegated-deposits-inflate-quorum-without-adding-votes.md) | Governance / Quorum Mismatch |
 
-> **Medium** — 4 findings spanning: (rg-m-01) passive supply making optimistic veto threshold unreachable; (rg-m-02) passive supply raising standard proposal threshold above entire electorate; (rg-m-03) reward token unregistration + permissionless poke burning reward emission windows; (rg-m-04) undelegated deposits inflating quorum without adding votes.
+> **Medium** — 4 findings spanning: passive supply making the optimistic veto threshold unreachable; passive supply raising the standard proposal threshold above the entire electorate; reward token unregistration plus permissionless poke burning reward emission windows; undelegated deposits inflating quorum without adding votes.
 
 ---
 
@@ -25,20 +25,20 @@ Medium severity findings — vulnerabilities with conditional impact, requiring 
 
 Low severity findings — informational issues, code quality, dead code, or edge cases with minimal to no direct financial impact.
 
-| # | Protocol | Folder | File | Cluster Bug |
-|---|----------|--------|------|-------------|
-| 1 | Reserve Governor | `rg-l-01` | [rg-l-01.md](Reserve%20Governor/Low/rg-l-01/rg-l-01.md) | Governance / Logic Error |
-| 2 | Reserve Governor | `rg-l-02` | [rg-l-02.md](Reserve%20Governor/Low/rg-l-02/rg-l-02.md) | Accounting / Stale Pricing |
-| 3 | Reserve Governor | `rg-l-03` | [rg-l-03.md](Reserve%20Governor/Low/rg-l-03/rg-l-03.md) | Math / Precision |
-| 4 | Reserve Governor | `rg-l-04` | [rg-l-04.md](Reserve%20Governor/Low/rg-l-04/rg-l-04.md) | Access Control / Stale Authority |
-| 5 | Reserve Governor | `rg-l-05` | [rg-l-05.md](Reserve%20Governor/Low/rg-l-05/rg-l-05.md) | ERC4626 / Interface Compliance |
-| 6 | Reserve Governor | `rg-l-06` | [rg-l-06.md](Reserve%20Governor/Low/rg-l-06/rg-l-06.md) | ETH Accounting / Timelock |
-| 7 | Reserve Governor | `rg-l-07` | [rg-l-07.md](Reserve%20Governor/Low/rg-l-07/rg-l-07.md) | Access Control / Insufficient Validation |
-| 8 | Reserve Governor | `rg-l-08` | [rg-l-08.md](Reserve%20Governor/Low/rg-l-08/rg-l-08.md) | Accounting / Rounding |
-| 9 | Reserve Governor | `rg-l-09` | [rg-l-09.md](Reserve%20Governor/Low/rg-l-09/rg-l-09.md) | State / Gas Bloat |
-| 10 | Reserve Governor | `rg-l-10` | [rg-l-10.md](Reserve%20Governor/Low/rg-l-10/rg-l-10.md) | Timestamp Dependency |
+| ID | Protocol | Finding | Cluster Bug |
+|----|----------|---------|-------------|
+| rg-l-01 | Reserve Governor | [The Original Optimistic Proposer Can Cancel the Auto-Created Pending Confirmation Proposal](Reserve%20Governor/Low/the-original-optimistic-proposer-can-cancel-the-auto-created-pending-confirmation-proposal.md) | Governance / Logic Error |
+| rg-l-02 | Reserve Governor | [Delayed Native Reward Accounting Lets New Depositors Capture Pending Rewards](Reserve%20Governor/Low/delayed-native-reward-accounting-lets-new-depositors-capture-pending-rewards.md) | Accounting / Stale Pricing |
+| rg-l-03 | Reserve Governor | [Optimistic Veto Threshold Rounds Down Instead of Up](Reserve%20Governor/Low/optimistic-veto-threshold-rounds-down-instead-of-up.md) | Math / Precision |
+| rg-l-04 | Reserve Governor | [A Revoked Optimistic Proposer Can Still Cancel a Succeeded Optimistic Proposal](Reserve%20Governor/Low/a-revoked-optimistic-proposer-can-still-cancel-a-succeeded-optimistic-proposal.md) | Access Control / Stale Authority |
+| rg-l-05 | Reserve Governor | [maxWithdraw and maxRedeem Ignore Delayed Unstaking and Overstate Immediate Liquidity](Reserve%20Governor/Low/maxwithdraw-and-maxredeem-ignore-delayed-unstaking-and-overstate-immediate-liquidity.md) | ERC4626 / Interface Compliance |
+| rg-l-06 | Reserve Governor | [Overpaying execute Traps Surplus ETH in the Timelock and Makes It Governance-Spendable](Reserve%20Governor/Low/overpaying-execute-traps-surplus-eth-in-the-timelock-and-makes-it-governance-spendable.md) | ETH Accounting / Timelock |
+| rg-l-07 | Reserve Governor | [Selector-Only Allowlisting Cannot Constrain Optimistic Call Arguments](Reserve%20Governor/Low/selector-only-allowlisting-cannot-constrain-optimistic-call-arguments.md) | Access Control / Insufficient Validation |
+| rg-l-08 | Reserve Governor | [Small Reward Dust Can Become Permanently Unclaimable](Reserve%20Governor/Low/small-reward-dust-can-become-permanently-unclaimable.md) | Accounting / Rounding |
+| rg-l-09 | Reserve Governor | [Unbounded Optimistic Proposal Descriptions Persist and Duplicate Across Confirmation Transition](Reserve%20Governor/Low/unbounded-optimistic-proposal-descriptions-persist-and-duplicate-across-confirmation-transition.md) | State / Gas Bloat |
+| rg-l-10 | Reserve Governor | [Optimistic Veto Window Can Collapse After Timestamp Discontinuity](Reserve%20Governor/Low/optimistic-veto-window-can-collapse-after-timestamp-discontinuity.md) | Timestamp Dependency |
 
-> **Low** — 10 findings spanning: (rg-l-01) original optimistic proposer canceling auto-created confirmation proposal; (rg-l-02) delayed reward accounting letting new depositors capture pending rewards; (rg-l-03) veto threshold rounding down instead of up; (rg-l-04) revoked proposer still canceling succeeded proposal; (rg-l-05) maxWithdraw/maxRedeem ignoring delayed unstaking; (rg-l-06) overpaying execute trapping surplus ETH in timelock; (rg-l-07) selector-only allowlisting not constraining call arguments; (rg-l-08) reward dust becoming permanently unclaimable; (rg-l-09) unbounded proposal descriptions duplicating across confirmation transition; (rg-l-10) veto window collapsing after timestamp discontinuity.
+> **Low** — 10 findings spanning: the original optimistic proposer canceling the auto-created pending confirmation proposal; delayed native reward accounting letting new depositors capture pending rewards; the optimistic veto threshold rounding down instead of up; a revoked optimistic proposer still canceling a succeeded proposal; maxWithdraw/maxRedeem ignoring delayed unstaking; overpaying execute trapping surplus ETH in the timelock; selector-only allowlisting not constraining call arguments; small reward dust becoming permanently unclaimable; unbounded proposal descriptions duplicating across the confirmation transition; the optimistic veto window collapsing after a timestamp discontinuity.
 
 ---
 

@@ -2,30 +2,9 @@
 
 ## Metadata
 
-- **Number:** #200
-- **Severity:** Low
-- **Status:** Duplicate
-- **Likelihood:** High
-- **Impact:** High
-- **Created by:** Foundoneblock
-- **Created at:** May 2, 2026 at 4:47 AM
-- **Last updated:** June 2, 2026 at 5:44 AM
-
-## Description
-
-# Audited by [Fajar Arrizki]
-
-Independent audit notes by Fajar Arrizki. Findings, proof-of-concept references, and impact assessments are documented for manual review.
-
-_Note: Not all issues are guaranteed to be correct._
-
-# The Original Optimistic Proposer Can Cancel the Auto-Created Pending Confirmation Proposal
----
-**#M-15**
-- Severity: Medium
-- Validity: Tested
-- Likelihood: Medium
-- Impact: The same optimistic proposer whose proposal was successfully vetoed can still unilaterally cancel the auto-created confirmation proposal before standard voting begins
+| Severity | Likelihood | Impact | Validity |
+|----------|------------|--------|----------|
+| Low | High | High | confirm |
 
 ## Description
 

@@ -2,30 +2,9 @@
 
 ## Metadata
 
-- **Number:** #784
-- **Severity:** Low
-- **Status:** Duplicate
-- **Likelihood:** High
-- **Impact:** High
-- **Created by:** Foundoneblock
-- **Created at:** May 8, 2026 at 11:20 PM
-- **Last updated:** June 2, 2026 at 5:44 AM
-
-## Description
-
-# Audited by [Fajar Arrizki]
-
-Independent audit notes by Fajar Arrizki. Findings, proof-of-concept references, and impact assessments are documented for manual review.
-
-_Note: Not all issues are guaranteed to be correct._
-
-# A Revoked Optimistic Proposer Can Still Cancel a Succeeded Optimistic Proposal
----
-**#M-31**
-- Severity: Medium
-- Validity: Tested
-- Likelihood: Medium
-- Impact: Governance can revoke an optimistic proposer’s future creation rights, but that same address can still come back in a later phase and cancel its already-succeeded optimistic proposal because cancellation reuses the stored proposer identity instead of re-checking current proposer authorization
+| Severity | Likelihood | Impact | Validity |
+|----------|------------|--------|----------|
+| Low | High | High | confirm |
 
 ## Description
 

@@ -2,30 +2,9 @@
 
 ## Metadata
 
-- **Number:** #67
-- **Severity:** Low
-- **Status:** Duplicate
-- **Likelihood:** Medium
-- **Impact:** Medium
-- **Created by:** Foundoneblock
-- **Created at:** May 1, 2026 at 12:45 AM
-- **Last updated:** June 2, 2026 at 5:44 AM
-
-## Description
-
-# Audited by [Fajar Arrizki]
-
-Independent audit notes by Fajar Arrizki. Findings, proof-of-concept references, and impact assessments are documented for manual review.
-
-_Note: Not all issues are guaranteed to be correct._
-
-# Delayed Native Reward Accounting Lets New Depositors Capture Pending Rewards
----
-**#M-02**
-- Severity: Medium
-- Validity: Tested
-- Likelihood: Medium
-- Impact: Bounded reward capture and dilution of incumbent stakers during stale accounting windows
+| Severity | Likelihood | Impact | Validity |
+|----------|------------|--------|----------|
+| Low | Medium | Medium | confirm |
 
 ## Description
 

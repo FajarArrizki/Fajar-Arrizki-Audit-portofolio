@@ -1,151 +1,181 @@
-# Overpaying execute Traps Surplus ETH in the Timelock and Makes It Governance-Spendable
+# Unbounded Optimistic Proposal Descriptions Persist and Duplicate Across Confirmation Transition
 
 ## Metadata
 
-- **Number:** #836
-- **Severity:** Low
-- **Status:** Duplicate
-- **Likelihood:** Medium
-- **Impact:** Medium
-- **Created by:** Foundoneblock
-- **Created at:** May 9, 2026 at 6:29 AM
-- **Last updated:** June 2, 2026 at 5:44 AM
+| Severity | Likelihood | Impact | Validity |
+|----------|------------|--------|----------|
+| Low | High | Medium | confirm |
 
 ## Description
 
-# Audited by [Fajar Arrizki]
+Optimistic proposal admission validates description shape, but it never enforces any size limit.
 
-Independent audit notes by Fajar Arrizki. Findings, proof-of-concept references, and impact assessments are documented for manual review.
+When an optimistic proposal is created:
 
-_Note: Not all issues are guaranteed to be correct._
+1. the full `string description` is stored inside `optimisticProposalDetails`,
+2. the same description is emitted through `ProposalCreated`,
+3. and if the proposal is vetoed into the standard lane, `transitionToPessimistic()` builds `Confirmation For: ` plus the entire original description and saves that as a second proposal.
 
-# Overpaying execute Traps Surplus ETH in the Timelock and Makes It Governance-Spendable
----
-**#M-40**
-- Severity: Medium
-- Validity: Tested
-- Likelihood: Medium
-- Impact: A caller can overpay `execute(...)`, trap surplus ETH inside the timelock, and later governance can redirect that stranded balance to arbitrary recipients even though the original proposal never referenced that extra value.
+So a single oversized optimistic description becomes duplicated governance state.
 
-## Description
+This is not a correctness bug in proposal hashing. The issue is that the protocol offers no bound on a field that is persisted, re-emitted, and copied into a second proposal lifecycle.
 
-Optimistic and pessimistic execution both forward ETH through the timelock, but the system never reconciles `msg.value` against the sum of `values[]`.
-
-For the optimistic path, `_executeOperations()` forwards the full `msg.value` into `executeBatchBypass(...)`.
-
-If the batch itself uses zero ETH, the surplus is not refunded. It simply remains in the timelock balance.
-
-That trapped ETH is not isolated.
-
-Any later successful governance execution can spend it by proposing a nonzero `values[i]` to an arbitrary target.
-
-So an overpaid execution silently converts accidental or malicious overpayment into future governance-controlled treasury value.
-
-### Optimistic execution forwards the entire `msg.value`
+### `proposeOptimistic()` stores the full caller-supplied description in optimistic proposal state
 
 ```solidity
-function _executeOperations(
-    uint256 proposalId,
-    address[] memory targets,
-    uint256[] memory values,
-    bytes[] memory calldatas,
-    bytes32 descriptionHash
-) internal override(GovernorUpgradeable, GovernorTimelockControlUpgradeable) {
-    if (_isOptimistic(proposalId)) {
-        // optimistic case: execute immediately
-
-        _timelock().executeBatchBypass{ value: msg.value }(
-            targets, values, calldatas, 0, bytes20(address(this)) ^ descriptionHash
-        );
-    } else {
-        // pessimistic case: execute through timelock
-
-        super._executeOperations(proposalId, targets, values, calldatas, descriptionHash);
-    }
-}
-```
-
-Source:
-- `contracts/governance/ReserveOptimisticGovernor.sol:345-362`
-
-GitHub permalink:
-- `https://github.com/reserve-protocol/reserve-governor/blob/dc27a68463cec356ff18bbdd3d8edfe9b2534372/contracts/governance/ReserveOptimisticGovernor.sol#L345-L362`
-
-No equality check is enforced between forwarded ETH and the economic value encoded in `values[]`.
-
-### The timelock bypass path marks ready and executes, but never refunds surplus ETH
-
-```solidity
-function executeBatchBypass(
+function proposeOptimistic(
     address[] calldata targets,
     uint256[] calldata values,
-    bytes[] calldata payloads,
-    bytes32 predecessor,
-    bytes32 salt
-) public payable onlyRole(PROPOSER_ROLE) {
-    bytes32 id = hashOperationBatch(targets, values, payloads, predecessor, salt);
+    bytes[] calldata calldatas,
+    string calldata description
+) external returns (uint256 proposalId) {
+    proposalId = getProposalId(targets, values, calldatas, keccak256(bytes(description)));
 
-    TimelockControllerStorage storage $ = _getTimelockControllerStorage();
+    optimisticProposalDetails[proposalId] = OptimisticProposalDetails({
+        targets: targets,
+        values: values,
+        calldatas: calldatas,
+        description: description,
+        vetoThreshold: optimisticParams.vetoThreshold
+    });
 
-    // mark Ready
-    require($._timestamps[id] == 0, TimelockControllerOptimistic__OperationConflict());
-    $._timestamps[id] = block.timestamp;
-
-    // check caller has EXECUTOR_ROLE and execute
-    executeBatch(targets, values, payloads, predecessor, salt);
+    ProposalLib.proposeOptimistic(
+        ProposalLib.ProposalData(proposalId, proposer, targets, values, calldatas, description),
+        _proposalCore(proposalId),
+        optimisticParams
+    );
 }
 ```
 
 Source:
-- `contracts/governance/TimelockControllerOptimistic.sol:76-92`
+- `contracts/governance/ReserveOptimisticGovernor.sol:149-173`
 
 GitHub permalink:
-- `https://github.com/reserve-protocol/reserve-governor/blob/dc27a68463cec356ff18bbdd3d8edfe9b2534372/contracts/governance/TimelockControllerOptimistic.sol#L76-L92`
+- `https://github.com/reserve-protocol/reserve-governor/blob/dc27a68463cec356ff18bbdd3d8edfe9b2534372/contracts/governance/ReserveOptimisticGovernor.sol#L149-L173`
 
-There is no refund path here and no explicit sum check for batch value consumption.
+### Proposal validation checks format, not size, and `_saveProposal()` emits the full description
+
+```solidity
+function _validateProposal(ProposalData calldata proposal, GovernorUpgradeable.ProposalCore storage proposalCore)
+    private
+    view
+{
+    require(
+        _isValidDescriptionForProposer(proposal.proposer, proposal.description),
+        IGovernor.GovernorRestrictedProposer(proposal.proposer)
+    );
+
+    require(
+        bytes18(bytes(proposal.description)) != CONFIRMATION_PREFIX_BYTES,
+        IReserveOptimisticGovernor.OptimisticGovernor__ConfirmationPrefixNotAllowed()
+    );
+}
+
+function _saveProposal(
+    ProposalData memory proposal,
+    GovernorUpgradeable.ProposalCore storage proposalCore,
+    uint256 voteDelay,
+    uint256 voteDuration
+) private {
+    emit IGovernor.ProposalCreated(
+        proposal.proposalId,
+        proposal.proposer,
+        proposal.targets,
+        proposal.values,
+        new string[](proposal.targets.length),
+        proposal.calldatas,
+        proposalCore.voteStart,
+        proposalCore.voteStart + proposalCore.voteDuration,
+        proposal.description
+    );
+}
+```
+
+Source:
+- `contracts/governance/lib/ProposalLib.sol:147-175`
+- `contracts/governance/lib/ProposalLib.sol:177-198`
+
+GitHub permalink:
+- `https://github.com/reserve-protocol/reserve-governor/blob/dc27a68463cec356ff18bbdd3d8edfe9b2534372/contracts/governance/lib/ProposalLib.sol#L147-L175`
+- `https://github.com/reserve-protocol/reserve-governor/blob/dc27a68463cec356ff18bbdd3d8edfe9b2534372/contracts/governance/lib/ProposalLib.sol#L177-L198`
+
+### Veto transition duplicates the oversized description into a second proposal
+
+```solidity
+function transitionToPessimistic(
+    uint256 proposalId,
+    IReserveOptimisticGovernor.OptimisticProposalDetails storage optimisticProposal,
+    mapping(uint256 proposalId => GovernorUpgradeable.ProposalCore) storage proposalCores
+) external {
+    string memory newDescription = string.concat(CONFIRMATION_PREFIX, optimisticProposal.description);
+
+    uint256 newProposalId = governor.getProposalId(
+        optimisticProposal.targets,
+        optimisticProposal.values,
+        optimisticProposal.calldatas,
+        keccak256(bytes(newDescription))
+    );
+
+    ProposalData memory proposalData = ProposalData(
+        newProposalId,
+        governor.proposalProposer(proposalId),
+        optimisticProposal.targets,
+        optimisticProposal.values,
+        optimisticProposal.calldatas,
+        newDescription
+    );
+
+    _saveProposal(proposalData, proposalCores[newProposalId], governor.votingDelay(), governor.votingPeriod());
+}
+```
+
+Source:
+- `contracts/governance/lib/ProposalLib.sol:108-143`
+
+GitHub permalink:
+- `https://github.com/reserve-protocol/reserve-governor/blob/dc27a68463cec356ff18bbdd3d8edfe9b2534372/contracts/governance/lib/ProposalLib.sol#L108-L143`
+
+So a single huge description can become two persisted proposal descriptions plus two event payloads.
 
 ## Root Cause
 
-The root cause is that governance execution treats incoming ETH as ambient timelock funding instead of exact proposal-scoped payment.
+The root cause is that description text is treated as unbounded governance metadata even though it is persisted in proposal state and copied again during optimistic-to-confirmation transition.
 
 ```text
 root cause:
-- governor forwards full msg.value into timelock execution
-- timelock does not reconcile msg.value against values[]
-- unused ETH remains on the timelock balance
-- later governance executions can spend that trapped ETH with unrelated proposals
+- optimistic proposal creation accepts arbitrary-length descriptions
+- ReserveOptimisticGovernor persists the full string inside optimisticProposalDetails
+- ProposalLib emits the full string in ProposalCreated
+- transitionToPessimistic() prepends a prefix and saves the whole payload again as a second proposal
+- no upper bound exists to cap the storage and event footprint of this duplicated metadata
 ```
 
 ## Impact
 
 This issue can cause:
 
-- accidental ETH overpayment during execution to become trapped,
-- trapped ETH to become silently governance-spendable by unrelated later proposals,
-- executors and operators to misattribute proposal value consumption,
-- and governance to gain an implicit ETH treasury that was never part of the original proposal payload.
+- avoidable proposal-creation gas bloat,
+- duplicated storage and event payloads when optimistic proposals are vetoed,
+- more expensive governance reactions in stressed scenarios,
+- and a griefable metadata surface for allowed optimistic proposers.
 
-This is a treasury/accounting integrity issue rather than an unprivileged direct theft path, so Medium severity is appropriate.
+This is a state-growth and governance-liveness issue rather than a direct execution bypass, so Medium severity is appropriate.
 
 ## Likelihood
 
-Likelihood is **medium**.
+Likelihood is **high**.
 
-The path requires either:
-
-- an overpaying executor,
-- or intentional overpayment by a caller,
-- and later governance control to redirect the trapped ETH.
+Any address with `OPTIMISTIC_PROPOSER_ROLE` can supply an oversized description immediately, and the duplication path is automatic if the proposal reaches the confirmation lane.
 
 ## Severity Rationale
 
 ### Why Impact is Medium
 
-The impact is **medium** because surplus ETH can be trapped and then later redirected by governance to arbitrary recipients. It is real value flow, not just a cosmetic accounting mismatch.
+The impact is **medium** because the protocol stores and duplicates unbounded governance metadata in a way that can raise costs and operational friction during proposal handling.
 
 ### Why it is not High
 
-It is **not high** because the exploit still depends on governance execution authority; an arbitrary external attacker cannot directly drain the timelock without a successful proposal path.
+It is **not high** because the bug does not directly alter proposal authorization, vote counting, or fund movement. It bloats storage and execution costs.
 
 ## Proof of Concept
 
@@ -153,12 +183,12 @@ It is **not high** because the exploit still depends on governance execution aut
 
 The standalone PoC demonstrates:
 
-1. a standard proposal is queued with `values = [0]`,
-2. execution is intentionally overpaid with `1 ether`,
-3. the proposal executes successfully,
-4. the full surplus remains trapped on the timelock balance,
-5. a later proposal sends that same trapped ETH to Bob,
-6. proving the surplus became unrelated governance-spendable value.
+1. an optimistic proposal is created with a 16,384-byte description,
+2. the proposal is accepted despite that unbounded payload,
+3. the proposal is vetoed into the confirmation lane,
+4. the governor derives the confirmation proposal from `Confirmation For: ` plus the entire huge description,
+5. the confirmation proposal is created successfully,
+6. proving oversized descriptions persist and are duplicated across the transition.
 
 ### Test code
 
@@ -390,46 +420,61 @@ abstract contract PocNewBaseExistingVault is PocNewBase {
 }
 ```
 
-###  Overpaying execute Traps Surplus ETH in the Timelock and Makes It Governance-Spendable
+### PocUnboundedOptimisticDescriptionStorageBloat.t.sol
 
 ```solidity
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
-pragma abicoder v2;
 
 import { IGovernor } from "@openzeppelin/contracts/governance/IGovernor.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import { PocNewBaseNewVault } from "./PocNewBase.t.sol";
 
-contract PocTimelockExcessEthTrapTest is PocNewBaseNewVault {
-    function test_poc_excessMsgValueGetsTrappedAndLaterSpentFromTimelock() public {
-        uint256 trappedEth = 1 ether;
+contract PocUnboundedOptimisticDescriptionStorageBloatTest is PocNewBaseNewVault {
+    function test_poc_optimisticProposalAcceptsHugeDescriptionAndDefeatDuplicatesItIntoConfirmationLane() public {
+        string memory hugeDescription = _buildLargeDescription(16_384);
 
-        (address[] memory trapTargets, uint256[] memory trapValues, bytes[] memory trapCalldatas) =
-            _singleCall(bob, 0, bytes(""));
+        (address[] memory targets, uint256[] memory values, bytes[] memory calldatas) =
+            _singleCall(address(underlying), 0, abi.encodeCall(IERC20.transfer, (alice, 1e18)));
 
-        (uint256 trapProposalId, bytes32 trapDescriptionHash) = _proposePassAndQueueStandard(
-            trapTargets, trapValues, trapCalldatas, "queue zero-value call then overpay execute"
+        vm.prank(optimisticProposer);
+        uint256 proposalId = governor.proposeOptimistic(targets, values, calldatas, hugeDescription);
+
+        _warpToActive(proposalId);
+
+        vm.prank(bob);
+        governor.castVote(proposalId, 0);
+
+        string memory confirmationDescription = string.concat("Confirmation For: ", hugeDescription);
+        uint256 confirmationProposalId =
+            governor.hashProposal(targets, values, calldatas, keccak256(bytes(confirmationDescription)));
+
+        assertEq(
+            uint256(governor.state(proposalId)),
+            uint256(IGovernor.ProposalState.Defeated),
+            "optimistic proposal can be defeated even when carrying a huge unbounded description"
         );
+        assertEq(
+            uint256(governor.state(confirmationProposalId)),
+            uint256(IGovernor.ProposalState.Pending),
+            "defeat copies the oversized description into a second confirmation proposal"
+        );
+        assertEq(
+            governor.proposalSnapshot(confirmationProposalId),
+            block.timestamp + VOTING_DELAY,
+            "confirmation proposal is created from the duplicated oversized description"
+        );
+    }
 
-        vm.warp(block.timestamp + TIMELOCK_DELAY + 1);
-        governor.execute{ value: trappedEth }(trapTargets, trapValues, trapCalldatas, trapDescriptionHash);
+    function _buildLargeDescription(uint256 length) internal pure returns (string memory) {
+        bytes memory payload = new bytes(length);
 
-        assertEq(uint256(governor.state(trapProposalId)), uint256(IGovernor.ProposalState.Executed));
-        assertEq(address(timelock).balance, trappedEth, "surplus ETH should remain trapped in timelock");
+        for (uint256 i = 0; i < length; ++i) {
+            payload[i] = bytes1(uint8(65 + (i % 26)));
+        }
 
-        uint256 bobEthBefore = bob.balance;
-        (address[] memory drainTargets, uint256[] memory drainValues, bytes[] memory drainCalldatas) =
-            _singleCall(bob, trappedEth, bytes(""));
-
-        (, bytes32 drainDescriptionHash) =
-            _proposePassAndQueueStandard(drainTargets, drainValues, drainCalldatas, "spend previously trapped ETH");
-
-        vm.warp(block.timestamp + TIMELOCK_DELAY + 1);
-        governor.execute(drainTargets, drainValues, drainCalldatas, drainDescriptionHash);
-
-        assertEq(bob.balance, bobEthBefore + trappedEth, "later governance execution can spend trapped ETH");
-        assertEq(address(timelock).balance, 0, "timelock surplus should be fully drainable by later proposal");
+        return string(payload);
     }
 }
 ```
@@ -437,12 +482,12 @@ contract PocTimelockExcessEthTrapTest is PocNewBaseNewVault {
 ### Test command
 
 ```powershell
-docker run --rm --entrypoint sh -v "D:\FuckAudit\Governor\Reserve Governor:/work" -w /work ghcr.io/foundry-rs/foundry:latest -lc "forge test --match-path test/poc_new/PocTimelockExcessEthTrap.t.sol -vvv"
+docker run --rm --entrypoint sh -v "D:\FuckAudit\Governor\Reserve Governor:/work" -w /work ghcr.io/foundry-rs/foundry:latest -lc "forge test --match-path test/poc_new/PocUnboundedOptimisticDescriptionStorageBloat.t.sol -vvv"
 ```
 
 ### Test output
 
 ```text
-[PASS] test_poc_excessMsgValueGetsTrappedAndLaterSpentFromTimelock()
+[PASS] test_poc_optimisticProposalAcceptsHugeDescriptionAndDefeatDuplicatesItIntoConfirmationLane()
 ```
 

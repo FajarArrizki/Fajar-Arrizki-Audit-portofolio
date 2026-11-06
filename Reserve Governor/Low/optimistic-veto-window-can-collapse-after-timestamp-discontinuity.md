@@ -2,31 +2,9 @@
 
 ## Metadata
 
-- **Number:** #877
-- **Severity:** Low
-- **Status:** Confirmed
-- **Likelihood:** Medium
-- **Impact:** Medium
-- **Labels:** Low Severity
-- **Created by:** Foundoneblock
-- **Created at:** May 9, 2026 at 10:37 AM
-- **Last updated:** June 2, 2026 at 5:44 AM
-
-## Description
-
-# Audited by [Fajar Arrizki]
-
-Independent audit notes by Fajar Arrizki. Findings, proof-of-concept references, and impact assessments are documented for manual review.
-
-_Note: Not all issues are guaranteed to be correct._
-
-# Optimistic Veto Window Can Collapse After Timestamp Discontinuity
----
-**#M-60**
-- Severity: Medium
-- Validity: Tested
-- Likelihood: Medium
-- Impact: An optimistic proposal can mature immediately after a large timestamp jump, effectively collapsing real-world review time.
+| Severity | Likelihood | Impact | Validity |
+|----------|------------|--------|----------|
+| Low | Medium | Medium | confirm |
 
 ## Description
 
